@@ -45,6 +45,7 @@ import {
   saveSettings,
   worldbookSelectionMatches,
 } from './state.js';
+import { MENSTRUAL_STAGES, PREGNANCY_STAGES, LABOR_STAGES } from './stage_config.js';
 import { canLoadHostWorldInfo, getHostWorldBook, loadHostWorldInfo } from './host.js';
 import {
   normalizeNextSkillId,
@@ -787,6 +788,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '【1. 角色基础注册】',
     '参数说明：',
     `- base.race: 纯种/混血/衍生种族/子类物种，保留原始写法，若故事为现代写实，种族统一填人类即可${declaredRace ? `。【重要】用户已明确指定，必须强制填写為：${declaredRace}` : ''}`,
+    '- base.stage: 当前周期阶段。非怀孕角色必须从「月经期、卵泡期、排卵期、黄体期」中选一个填入；怀孕角色从「孕早期、孕中期、孕晚期、临产期」中选。若用户对话中明确指定了阶段（如排卵期、月经期），必须如实填写；未指定时根据角色设定和 normalDescription 的身体描写推断，确保 stage 与描述栏位一致。',
     '- base.vitalityLevel: 1-7，默认语义为 一推就倒(1)-身怀病弱(2)-难产体态(3)-均衡体力(4)-安产体态(5)-经过锻炼(6)-无坚不摧(7)',
     '- base.psyStressLevel: 1-7，默认语义为 情感丧失麻木不仁(1)-内向压抑冷感(2)-情绪平缓理性(3)-情绪均衡稳定(4)-情绪丰富敏感(5)-强烈波动焦躁(6)-极端情绪精神异常(7)',
     '- base.age: 角色年龄',
@@ -800,11 +802,11 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '注意：vitalityLevel 与 psyStressLevel 是角色内在特质等级，不根据当前疲劳、刚哭过、当下崩溃等暂时状态调整。',
     '注意：base.vitality 与 base.psyStress 不由你直接填写，系统会根据 vitalityLevel 与 psyStressLevel 自动计算初始值。',
     '示例：',
-    '- 人类少女: {"base":{"race":"人类","vitalityLevel":4,"psyStressLevel":4,"age":18,"uterinePressure":0},"metabolism":{"libido":12}}',
-    '- 混血: {"base":{"race":"天使x恶魔","vitalityLevel":5,"psyStressLevel":3,"age":25,"uterinePressure":3},"metabolism":{"libido":35}}',
-    '- 衍生种族: {"base":{"race":"[血族]人类","vitalityLevel":2,"psyStressLevel":5,"age":150,"uterinePressure":0},"metabolism":{"libido":28}}',
-    '- 子类物种: {"base":{"race":"鱼人-鲸族","vitalityLevel":6,"psyStressLevel":2,"age":30,"uterinePressure":0},"metabolism":{"libido":20}}',
-    '- 复杂种族: {"base":{"race":"[不死-僵尸]兽耳族-九尾狐","vitalityLevel":7,"psyStressLevel":1,"age":1000,"uterinePressure":20},"metabolism":{"libido":60}}',
+    '- 人类少女(排卵期): {"base":{"race":"人类","stage":"排卵期","vitalityLevel":4,"psyStressLevel":4,"age":18,"uterinePressure":0},"metabolism":{"libido":12}}',
+    '- 混血(月经期): {"base":{"race":"天使x恶魔","stage":"月经期","vitalityLevel":5,"psyStressLevel":3,"age":25,"uterinePressure":3},"metabolism":{"libido":35}}',
+    '- 衍生种族(卵泡期): {"base":{"race":"[血族]人类","stage":"卵泡期","vitalityLevel":2,"psyStressLevel":5,"age":150,"uterinePressure":0},"metabolism":{"libido":28}}',
+    '- 子类物种(黄体期): {"base":{"race":"鱼人-鲸族","stage":"黄体期","vitalityLevel":6,"psyStressLevel":2,"age":30,"uterinePressure":0},"metabolism":{"libido":20}}',
+    '- 复杂种族(孕中期): {"base":{"race":"[不死-僵尸]兽耳族-九尾狐","stage":"孕中期","vitalityLevel":7,"psyStressLevel":1,"age":1000,"uterinePressure":20},"metabolism":{"libido":60}}',
     '【2. 情感与妊娠经验】',
     '参数说明：',
     '- virginity: 初次性对象名称，处女时为 null',
@@ -893,6 +895,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '  "name": "string",',
     '  "profile": {',
     '    "base": {',
+    '      "stage": "排卵期",',
     '      "age": 0,',
     '      "race": "string",',
     '      "uterinePressure": 0,',
@@ -1269,6 +1272,12 @@ function sanitizeRegistryProfile(profile, baseProfile) {
       if (profile.base.derivedType === undefined && parsed.derivedType !== null) nextBase.derivedType = parsed.derivedType;
     }
     if (profile.base.derivedType !== undefined) nextBase.derivedType = profile.base.derivedType === null ? null : String(profile.base.derivedType || '').trim() || null;
+    if (profile.base.stage !== undefined) {
+      const stage = String(profile.base.stage || '').trim();
+      if (MENSTRUAL_STAGES.includes(stage) || PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage) || stage === '假孕期' || stage === '产兆前驱' || stage === '产后恢复' || stage === '无经期' || stage === '未激活') {
+        nextBase.stage = stage;
+      }
+    }
     if (profile.base.age !== undefined) {
       const age = Number(profile.base.age);
       if (Number.isFinite(age)) nextBase.age = age;
