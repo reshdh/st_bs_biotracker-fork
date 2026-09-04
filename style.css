@@ -2262,6 +2262,16 @@
   opacity: 0.82;
 }
 
+#bs-biotracker-settings .bs-bt-need-icon--urine {
+  mask-image: url('./assets/icons/droplet-svgrepo-com.svg');
+  -webkit-mask-image: url('./assets/icons/droplet-svgrepo-com.svg');
+}
+
+#bs-biotracker-settings .bs-bt-need-icon--stool {
+  mask-image: url('./assets/icons/toilet-paper-svgrepo-com.svg');
+  -webkit-mask-image: url('./assets/icons/toilet-paper-svgrepo-com.svg');
+}
+
 #bs-biotracker-settings .bs-bt-need-icon--excretion {
   mask-image: url('./assets/icons/toilet-paper-svgrepo-com.svg');
   -webkit-mask-image: url('./assets/icons/toilet-paper-svgrepo-com.svg');
