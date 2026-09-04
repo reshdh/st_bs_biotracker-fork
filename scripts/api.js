@@ -1386,8 +1386,9 @@ export async function callOpenAICompatible(settings, payload, systemPrompt = DEF
     temperature: 0.2,
     ...stPresetSampling,
     messages: effectiveMessages,
-    // 注册请求返回的 JSON 含 6×6 stageProfiles 等大量文字，4096 不够会被截断
-    ...(isRegistry ? { max_tokens: 8192 } : {}),
+    // 注册请求返回的 JSON 含 6×6 stageProfiles 等大量文字，上限给足避免截断；
+    // max_tokens 是上限不是目标，实际生成多少收多少，设大无额外代价
+    ...(isRegistry ? { max_tokens: 30720 } : {}),
     ...(useFormattedOutputV4 ? { response_format: { type: 'json_object' } } : {}),
   };
   recordEffectiveRequestDebug(
