@@ -1,0 +1,785 @@
+<div id="bs-biotracker-settings" class="bs-bt-device theme-retro" data-view="home">
+  <div class="bs-bt-hardware-detail bs-bt-metal-corner bs-bt-corner-tl"></div>
+  <div class="bs-bt-hardware-detail bs-bt-metal-corner bs-bt-corner-tr"></div>
+  <div class="bs-bt-hardware-detail bs-bt-screw bs-bt-screw-tl"></div>
+  <div class="bs-bt-hardware-detail bs-bt-screw bs-bt-screw-tr"></div>
+  <div class="bs-bt-hardware-detail bs-bt-screw bs-bt-screw-bl"></div>
+  <div class="bs-bt-hardware-detail bs-bt-screw bs-bt-screw-br"></div>
+
+  <div class="bs-bt-brand" id="bs-bt-brand">Bastneth Pager</div>
+
+  <div class="bs-bt-screen-shell">
+    <div class="bs-bt-screen" id="bs-bt-screen">
+      <div class="bs-bt-screen-header">
+        <span id="bs-bt-time">--:--</span>
+        <span id="bs-bt-title">HOME</span>
+        <span id="bs-bt-status-icons" class="bs-bt-status-icons" aria-label="battery status" tabindex="0">
+          <svg class="bs-bt-battery-icon" viewBox="0 0 30 14" fill="none" xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true">
+            <rect x="1" y="1" width="24" height="12" rx="2" stroke="currentColor" stroke-width="2"></rect>
+            <rect id="bs-bt-battery-fill" x="4" y="4" width="16" height="6" rx="1" fill="currentColor"></rect>
+            <rect x="26" y="4" width="3" height="6" rx="1" fill="currentColor"></rect>
+          </svg>
+        </span>
+      </div>
+
+      <div class="bs-bt-screen-content" id="bs-bt-viewport">
+        <section id="bs-bt-view-home" class="bs-bt-view is-active" data-view="home">
+          <div class="bs-bt-panel">
+            <div class="bs-bt-menu-grid">
+              <button class="bs-bt-home-tile" type="button" data-nav-view="tracker-preset">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--preset" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">预设</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="worldbook-filter">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--filter" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">排除</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="register">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--register" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">注册</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="skill-catalog">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--skill" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">技能</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="track-list">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--track" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">追踪</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="wardrobe">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--wardrobe" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">衣柜</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="full-state">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--json" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">变量</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="race-encyclopedia">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--dna" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">百科</span>
+              </button>
+              <button class="bs-bt-home-tile" type="button" data-nav-view="theme">
+                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--theme" aria-hidden="true"></span>
+                <span class="bs-bt-home-tile__label">主题</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-skill-catalog" class="bs-bt-view" data-view="skill-catalog">
+          <div class="bs-bt-panel">
+            <div id="bs-bt-skill-catalog-overview">
+              <div id="bs-bt-skill-catalog-list" class="bs-bt-skill-catalog-list"></div>
+
+              <hr class="sysHR" />
+
+              <div class="settings_section bs-bt-skill-definition-form">
+                <div class="bs-bt-section-title">新增技能</div>
+                <label for="bs-bt-skill-definition-name">技能名称</label>
+                <input id="bs-bt-skill-definition-name" class="text_pole" type="text" placeholder="例如：NTR" />
+                <label for="bs-bt-skill-definition-description">定义描述</label>
+                <textarea id="bs-bt-skill-definition-description" class="text_pole bs-bt-textarea" rows="4" placeholder="新增技能必须提供清楚且稳定的定义。"></textarea>
+                <button id="bs-bt-skill-definition-add" class="menu_button" type="button">新增技能</button>
+              </div>
+
+              <div id="bs-bt-skill-catalog-status" class="bs-bt-inline-status"></div>
+            </div>
+
+            <div id="bs-bt-skill-definition-detail" hidden>
+              <div class="settings_section bs-bt-skill-detail-head">
+                <button id="bs-bt-skill-detail-back" class="menu_button" type="button">返回技能列表</button>
+                <div id="bs-bt-skill-detail-title" class="bs-bt-section-title"></div>
+                <div id="bs-bt-skill-detail-description"></div>
+              </div>
+              <div id="bs-bt-skill-detail-characters" class="bs-bt-skill-detail-characters"></div>
+              <div id="bs-bt-character-skill-status" class="bs-bt-inline-status"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-theme" class="bs-bt-view" data-view="theme">
+          <div class="bs-bt-panel">
+            <div class="bs-bt-section-title">显示尺寸</div>
+            <div class="bs-bt-size-options" id="bs-bt-size-options">
+              <button type="button" class="bs-bt-size-option" data-device-size-option="phone">手机</button>
+              <button type="button" class="bs-bt-size-option" data-device-size-option="tablet">平板</button>
+            </div>
+
+            <hr class="sysHR" />
+
+            <div class="bs-bt-section-title">字体大小</div>
+            <div class="bs-bt-size-options" id="bs-bt-font-size-options">
+              <button type="button" class="bs-bt-size-option" data-font-size-option="compact">小</button>
+              <button type="button" class="bs-bt-size-option" data-font-size-option="standard">标准</button>
+              <button type="button" class="bs-bt-size-option" data-font-size-option="large">大</button>
+            </div>
+
+            <hr class="sysHR" />
+
+            <div class="bs-bt-section-title">主题风格</div>
+            <div class="bs-bt-theme-list" id="bs-bt-theme-list">
+              <button type="button" class="bs-bt-theme-option" data-theme-option="retro">1. 仿真 (Retro)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="cultivation">2. 修仙 (Jade)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="fantasy">3. 奇幻 (Fantasy)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="cyber-egypt">4. 埃及 (Cyber)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="wasteland">5. 废土 (Pip-Boy)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="sakura">6. 樱花 (Modern)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="holo">7. 全息 (Holo)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="gothic">8. 哥特 (Gothic)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="steampunk">9. 蒸汽 (Steam)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="eldritch">10. 克系 (Eldritch)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="ink">11. 水墨 (Ink)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="constructivism">12. 建构 (Construct)</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-system" class="bs-bt-view" data-view="system">
+          <div class="bs-bt-panel">
+            <div class="settings_section flex-container alignitemscenter">
+              <input type="checkbox" id="bs-bt-enabled" />
+              <label for="bs-bt-enabled">启用异步生理状态追踪</label>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-api-url">OpenAI 兼容 API Base URL</label>
+              <input id="bs-bt-api-url" class="text_pole" type="text" placeholder="https://api.example.com/v1" />
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-api-key">API Key</label>
+              <input id="bs-bt-api-key" class="text_pole" type="password" placeholder="sk-..." />
+            </div>
+
+            <div class="settings_section flex-container gap8 bs-bt-connect-row">
+              <button id="bs-bt-connect" class="menu_button" type="button">连接并拉取模型</button>
+              <div id="bs-bt-connect-status" class="bs-bt-connect-status">尚未连接</div>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-model-list">模型列表</label>
+              <select id="bs-bt-model-list" class="text_pole">
+                <option value="">请先连接并拉取模型</option>
+              </select>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-model">模型名称</label>
+              <input id="bs-bt-model" class="text_pole" type="text" placeholder="gpt-4.1-mini" />
+            </div>
+
+            <div class="settings_section">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input id="bs-bt-formatted-output-v4" type="checkbox" />
+                <span>格式化输出(v4兼容)</span>
+              </label>
+              <small>请求体附加 response_format.type = json_object，可减少掉格式；不支持该参数的渠道请关闭。</small>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-setting-toggle-row">
+                <input id="bs-bt-race-catalog" type="checkbox" />
+                <label for="bs-bt-race-catalog">提示词附带种族名录</label>
+              </div>
+              <small>让模型知道系统内建了哪些种族，避免注册与 bsAddSperm 时凭空自创种族名（自创名称查不到生理参数）。追踪请求约多 350 token，注册请求约多 1000 token。纯现代写实剧本可关闭。</small>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-setting-toggle-row">
+                <input id="bs-bt-mvu-extra-analysis-compat" type="checkbox" />
+                <label for="bs-bt-mvu-extra-analysis-compat">MVU 额外模型解析兼容(等待变量更新完成后再追踪)</label>
+              </div>
+              <small>检测到 MVU 变量框架开启「额外模型解析」时，延迟追踪请求到本轮变量更新结束后再发送，避免与 MVU 的更新请求重复消耗额度。</small>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-trigger">触发时机</label>
+              <select id="bs-bt-trigger" class="text_pole">
+                <option value="after_ai">after_ai</option>
+                <option value="after_user">after_user</option>
+              </select>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-poll-ms">轮询间隔（毫秒）</label>
+              <input id="bs-bt-poll-ms" class="text_pole" type="number" min="800" step="100" />
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-api-timeout-sec">请求超时（秒，0 = 不限制）</label>
+              <input id="bs-bt-api-timeout-sec" class="text_pole" type="number" min="0" max="1800" step="10" />
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-context-size">送入分析的最近消息数</label>
+              <input id="bs-bt-context-size" class="text_pole" type="number" min="2" step="1" />
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-tracker-token-budget">追踪提示词注意力预算（估算 token，仅作为左上角电池的插件请求体积警示，不限制發送）</label>
+              <input id="bs-bt-tracker-token-budget" class="text_pole" type="number" min="500" max="100000" step="100" />
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-setting-toggle-row">
+                <input id="bs-bt-require-full-description-updates" type="checkbox" />
+                <label for="bs-bt-require-full-description-updates">bsSetDescription 完整更新模式(仅为LLM提示词要求，不保證成效)</label>
+              </div>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-setting-toggle-row">
+                <input id="bs-bt-luker-multi-agent-manual-only" type="checkbox" />
+                <label for="bs-bt-luker-multi-agent-manual-only">Luker 多智能体安全模式(关闭自动追踪，编排完成后手动分析)</label>
+              </div>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-diary-recent-limit">送入分析的单角色最近日记数（设 0 视为关闭日记系统）</label>
+              <input id="bs-bt-diary-recent-limit" class="text_pole" type="number" min="0" max="20" step="1" />
+            </div>
+
+            <div class="settings_section flex-container gap8">
+              <button id="bs-bt-save" class="menu_button" type="button">保存设置</button>
+            </div>
+
+            <hr class="sysHR" />
+
+            <div class="settings_section bs-bt-action-row">
+              <button id="bs-bt-clear" class="menu_button" type="button">清除当前聊天状态</button>
+            </div>
+            <div class="settings_section bs-bt-action-row">
+              <button id="bs-bt-clear-all-chats" class="menu_button" type="button">清空所有聊天的追踪状态</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-tracker-preset" class="bs-bt-view" data-view="tracker-preset">
+          <div class="bs-bt-panel">
+            <div class="settings_section">
+              <label for="bs-bt-tracker-preset-list">Tracker 专用预设</label>
+              <select id="bs-bt-tracker-preset-list" class="text_pole">
+                <option value="__bsbt_no_preset__">裸请求（不套用预设）</option>
+              </select>
+            </div>
+            <div id="bs-bt-prompt-toggles" class="bs-bt-prompt-toggles" style="display:none;"></div>
+            <div class="settings_section bs-bt-action-row">
+              <button id="bs-bt-refresh-presets" class="menu_button" type="button">刷新预设列表</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-register" class="bs-bt-view" data-view="register">
+          <div class="bs-bt-panel">
+            <div class="settings_section bs-bt-register-source-section">
+              <label for="bs-bt-register-source">注册来源</label>
+              <select id="bs-bt-register-source" class="text_pole">
+                <option value="">新角色</option>
+              </select>
+              <div id="bs-bt-register-source-summary" class="bs-bt-inline-status">直接注册新角色。</div>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-register-name">注册角色名</label>
+              <input id="bs-bt-register-name" class="text_pole" type="text" placeholder="露比" />
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-register-race">注册种族</label>
+              <div class="bs-bt-race-picker-wrap">
+                <div class="bs-bt-race-input-row">
+                  <input id="bs-bt-register-race" class="text_pole" type="text" value="人类"
+                    placeholder="人类 / 混血 / 衍生 / 子项" />
+                  <button type="button" class="bs-bt-race-picker-button" data-race-picker-target="bs-bt-register-race"
+                    title="种族调色盘" aria-label="种族调色盘">☥</button>
+                </div>
+                <div id="bs-bt-register-race-palette-anchor"></div>
+              </div>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-track-tabs" id="bs-bt-register-tabs">
+                <button type="button" class="bs-bt-track-tab is-active" data-register-tab="inference">推演</button>
+                <button type="button" class="bs-bt-track-tab" data-register-tab="registry">注册</button>
+                <button type="button" class="bs-bt-track-tab" data-register-tab="wardrobe">备装</button>
+                <button type="button" class="bs-bt-track-tab" data-register-tab="diary">日记</button>
+                <button type="button" class="bs-bt-track-tab" data-register-tab="skills">技能</button>
+              </div>
+            </div>
+
+            <div class="bs-bt-register-page is-active" data-register-page="inference">
+              <div id="bs-bt-breeding-inference-target" class="bs-bt-inference-target" hidden></div>
+              <div class="settings_section">
+                <label for="bs-bt-breeding-inference-prompt">额外推演提示</label>
+                <textarea id="bs-bt-breeding-inference-prompt" class="text_pole bs-bt-textarea" rows="4" placeholder="只影响本次繁育推演。可写特别关注的心理方向、过往经历、关系解释、当前是否应偏向月经期或孕期心理等。"></textarea>
+              </div>
+
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-breeding-inference-run" class="menu_button" type="button">繁育推演</button>
+                <button id="bs-bt-breeding-inference-apply" class="menu_button" type="button">套用至已注册角色</button>
+              </div>
+
+              <hr class="sysHR" />
+
+              <div class="settings_section">
+                <label for="bs-bt-breeding-inference-status">繁育推演</label>
+                <textarea id="bs-bt-breeding-inference-status" class="text_pole bs-bt-textarea bs-bt-status-box"
+                  rows="14">尚未执行繁育推演。直接注册不会生成繁育心理人设。</textarea>
+                <div id="bs-bt-breeding-inference-message" class="bs-bt-inline-status"></div>
+              </div>
+            </div>
+
+            <div class="bs-bt-register-page" data-register-page="registry" hidden>
+              <div class="settings_section">
+                <label for="bs-bt-register-custom-notes">角色补充设定</label>
+                <textarea id="bs-bt-register-custom-notes" class="text_pole bs-bt-textarea" rows="3"
+                  placeholder="仅用于本次角色注册。例如：羊膜绒毛膜为 MCMA、时常泌乳体质、特殊繁殖设定等。"></textarea>
+              </div>
+
+              <div class="settings_section">
+                <label for="bs-bt-registry-normal-description">注册默认 normalDescription 规则</label>
+                <textarea id="bs-bt-registry-normal-description" class="text_pole bs-bt-textarea" rows="7"></textarea>
+              </div>
+
+
+              <div class="settings_section">
+                <label for="bs-bt-registry-pregnant-description">注册默认 pregnantDescription 规则</label>
+                <textarea id="bs-bt-registry-pregnant-description" class="text_pole bs-bt-textarea" rows="8"></textarea>
+              </div>
+
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-register-run" class="menu_button" type="button">注册当前角色</button>
+              </div>
+
+              <hr class="sysHR" />
+
+              <div class="settings_section">
+                <div class="bs-bt-status-title">注册状态</div>
+                <pre id="bs-bt-register-status"
+                  class="bs-bt-status-box">输入名字与 Description 规则后发送注册请求，完成后可在“完整变量”查看该角色状态变量。</pre>
+              </div>
+            </div>
+            <div class="bs-bt-register-page" data-register-page="wardrobe" hidden>
+              <div class="settings_section">
+                <label>备装数量</label>
+                <div class="bs-bt-inline-grid bs-bt-inline-grid--two">
+                  <label class="bs-bt-mini-field" for="bs-bt-wardrobe-prep-main-count">
+                    <span>主件 main</span>
+                    <input id="bs-bt-wardrobe-prep-main-count" class="text_pole" type="number" min="1" max="12" step="1" />
+                  </label>
+                  <label class="bs-bt-mini-field" for="bs-bt-wardrobe-prep-accessory-count">
+                    <span>配件 accessory</span>
+                    <input id="bs-bt-wardrobe-prep-accessory-count" class="text_pole" type="number" min="0" max="12" step="1" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="settings_section">
+                <label for="bs-bt-wardrobe-prep-prompt">额外备装提示</label>
+                <textarea id="bs-bt-wardrobe-prep-prompt" class="text_pole bs-bt-textarea" rows="5" placeholder="可写角色偏好、禁忌、职业/场景、常穿颜色、是否需要孕期可扩容衣物等。"></textarea>
+              </div>
+
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-wardrobe-prep-run" class="menu_button" type="button">生成备装</button>
+                <button id="bs-bt-wardrobe-prep-apply" class="menu_button" type="button">套用备装</button>
+              </div>
+
+              <div class="settings_section">
+                <label for="bs-bt-wardrobe-prep-json">备装 JSON</label>
+                <textarea id="bs-bt-wardrobe-prep-json" class="text_pole bs-bt-textarea" rows="16" placeholder="先输入已注册角色名，再让 AI 生成备装；生成后可在这里手动微调 JSON，再套用。"></textarea>
+              </div>
+
+              <div class="settings_section">
+                <div class="bs-bt-status-title">备装状态</div>
+                <pre id="bs-bt-wardrobe-prep-status" class="bs-bt-status-box">角色必须已注册，才能准备衣柜与当前穿着。</pre>
+              </div>
+            </div>
+            <div class="bs-bt-register-page" data-register-page="diary" hidden>
+              <div class="settings_section">
+                <label for="bs-bt-diary-writing-prompt">日记写作规则</label>
+                <textarea id="bs-bt-diary-writing-prompt" class="text_pole bs-bt-textarea" rows="5"
+                  placeholder="例如：日记要有事后整理感，至少两段；包含事件、身体感受、自我解释、情绪反刍，不要写成即时心声。"></textarea>
+              </div>
+              <div class="settings_section">
+                <label for="bs-bt-diary-date">日期（可选）</label>
+                <input id="bs-bt-diary-date" class="text_pole" type="text"
+                  placeholder="留空时由 AI 依故事上下文填写" />
+              </div>
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-diary-generate" class="menu_button" type="button">生成日记</button>
+                <button id="bs-bt-diary-apply" class="menu_button" type="button">写入日记</button>
+              </div>
+              <div class="settings_section">
+                <label for="bs-bt-diary-result">日记预览</label>
+                <textarea id="bs-bt-diary-result" class="text_pole bs-bt-textarea" rows="14"
+                  placeholder="生成结果会显示为 JSON，可修改 time 与 content 后再写入。"></textarea>
+                <div id="bs-bt-diary-status" class="bs-bt-inline-status">角色必须已注册，且同一故事日尚未写过日记。</div>
+              </div>
+            </div>
+            <div class="bs-bt-register-page" data-register-page="skills" hidden>
+              <div class="settings_section">
+                <label for="bs-bt-register-skill-prompt">额外技能／天赋提示</label>
+                <textarea id="bs-bt-register-skill-prompt" class="text_pole bs-bt-textarea" rows="5"
+                  placeholder="例如：她从小接受剑术训练，初始剑术 Lv2；对魔力感知很有天赋，但尚未正式觉醒相关技能。"></textarea>
+              </div>
+
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-register-skill-generate" class="menu_button" type="button">生成技能／天赋</button>
+                <button id="bs-bt-register-skill-write" class="menu_button" type="button">写入技能／天赋</button>
+              </div>
+
+              <hr class="sysHR" />
+
+              <div class="settings_section">
+                <label for="bs-bt-register-skill-result">技能／天赋预览</label>
+                <textarea id="bs-bt-register-skill-result" class="text_pole bs-bt-textarea" rows="14"
+                  placeholder="生成结果会显示为 JSON；确认或修改后再写入角色。"></textarea>
+                <div id="bs-bt-register-skill-status" class="bs-bt-inline-status">角色必须先完成注册，才能生成并写入初始技能／天赋。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-track-list" class="bs-bt-view" data-view="track-list">
+          <div class="bs-bt-panel">
+            <div class="settings_section">
+              <div id="bs-bt-track-character-list" class="bs-bt-track-character-list"></div>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-status-title">最新工具调用</div>
+              <div id="bs-bt-track-last-call" class="bs-bt-status-box">尚无数据</div>
+            </div>
+
+            <div class="settings_section bs-bt-action-row">
+              <button id="bs-bt-run" class="menu_button" type="button">立即分析当前对话</button>
+            </div>
+
+            <div class="bs-bt-track-list-note">说明：离场角色会以精简状态发送给追踪器；点击仍可查看资料，并可在调试面板手动切回在场。</div>
+
+            <div class="settings_section">
+              <label for="bs-bt-targets">优先追踪角色名（逗号或换行分隔，可留空）</label>
+              <input id="bs-bt-targets" class="text_pole" type="text" placeholder="艾莉丝,露比" />
+              <small>填写后，追踪器会先检查这些角色的剧情与在场状态；留空则平等追踪全部已注册角色。</small>
+            </div>
+
+            <div class="settings_section" hidden>
+              <label for="bs-bt-system-prompt">角色提示词 / 异步分析系统提示词</label>
+              <textarea id="bs-bt-system-prompt" class="text_pole bs-bt-textarea" rows="10"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-wardrobe" class="bs-bt-view" data-view="wardrobe">
+          <div class="bs-bt-panel">
+            <div class="settings_section">
+              <div class="bs-bt-track-tabs bs-bt-wardrobe-tabs" id="bs-bt-wardrobe-tabs">
+                <button type="button" class="bs-bt-track-tab is-active" data-wardrobe-tab="characters">角色衣柜</button>
+                <button type="button" class="bs-bt-track-tab" data-wardrobe-tab="add">新增衣物</button>
+              </div>
+            </div>
+            <div id="bs-bt-wardrobe-characters-page" class="settings_section">
+              <div id="bs-bt-wardrobe-list" class="bs-bt-wardrobe-list"></div>
+            </div>
+            <div id="bs-bt-wardrobe-add-page" class="settings_section" hidden></div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-worldbook-filter" class="bs-bt-view" data-view="worldbook-filter">
+          <div class="bs-bt-panel">
+            <div class="settings_section">
+              <label for="bs-bt-tracker-worldbook-mode">传输模式</label>
+              <select id="bs-bt-tracker-worldbook-mode" class="text_pole">
+                <option value="exclude">正常模式：传输启用条目，可手动排除</option>
+                <option value="mainflow">主流模式：优先采用 ST 已启用的世界书，无解析结果时按常驻/关键字触发</option>
+                <option value="allowlist_all">参考模式：默认全排除，仅传输手动指定条目（可包含 disabled）</option>
+              </select>
+            </div>
+
+            <div class="settings_section bs-bt-worldbook-scope-tabs" id="bs-bt-worldbook-scope-tabs">
+              <button class="bs-bt-track-tab is-active" type="button" data-worldbook-scope-tab="character">角色世界书(主+附加)</button>
+              <button class="bs-bt-track-tab" type="button" data-worldbook-scope-tab="global">全域世界书</button>
+            </div>
+
+            <div class="bs-bt-worldbook-scope-panel is-active" data-worldbook-scope-panel="character">
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-worldbook-clear-all" class="menu_button" type="button">清空角色文本框</button>
+              </div>
+
+              <div class="settings_section">
+                <div class="bs-bt-status-title">角色世界书（主书+附加）条目</div>
+                <small>附加知识书条目显示为「书名 :: 条目名」。</small>
+                <input id="bs-bt-worldbook-entry-search" class="text_pole" type="text" placeholder="搜索条目名/附加书名" style="margin-bottom:8px;" />
+                <div id="bs-bt-worldbook-entry-list" class="bs-bt-theme-list"></div>
+              </div>
+
+              <div class="settings_section">
+                <label for="bs-bt-worldbook-filter-input" id="bs-bt-worldbook-filter-input-label">角色可排除</label>
+                <textarea id="bs-bt-worldbook-filter-input" class="text_pole bs-bt-textarea" rows="6" placeholder="每行一个条目名；附加书条目建议用「书名 :: 条目名」。正常模式下，这些条目会从 worldbook 传输中排除。"></textarea>
+              </div>
+            </div>
+
+            <div class="bs-bt-worldbook-scope-panel" data-worldbook-scope-panel="global">
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-global-worldbook-clear-all" class="menu_button" type="button">清空全域文本框</button>
+              </div>
+
+              <div class="settings_section">
+                <div class="bs-bt-status-title" id="bs-bt-global-worldbook-title">全域世界书条目</div>
+                <input id="bs-bt-global-worldbook-entry-search" class="text_pole" type="text" placeholder="搜索全域书名或条目名" style="margin-bottom:8px;" />
+                <div id="bs-bt-global-worldbook-entry-list" class="bs-bt-theme-list"></div>
+              </div>
+
+              <div class="settings_section">
+                <label for="bs-bt-global-worldbook-filter-input" id="bs-bt-global-worldbook-filter-input-label">全域可排除</label>
+                <textarea id="bs-bt-global-worldbook-filter-input" class="text_pole bs-bt-textarea" rows="6" placeholder="每行一个“书名 :: 条目名”。正常模式下，这些全域条目会从 worldbook 传输中排除。"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-track-char" class="bs-bt-view" data-view="track-char">
+          <div class="bs-bt-panel">
+            <div class="settings_section bs-bt-action-row">
+              <button id="bs-bt-track-back" class="menu_button" type="button">返回人物清单</button>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-track-dashboard">
+                <div class="bs-bt-track-tabs" id="bs-bt-track-tabs">
+                  <button type="button" class="bs-bt-track-tab" data-track-tab="overview">概览</button>
+                  <button type="button" class="bs-bt-track-tab" data-track-tab="description">描述</button>
+                  <button type="button" class="bs-bt-track-tab" data-track-tab="pregnancy">妊娠</button>
+                  <button type="button" class="bs-bt-track-tab" data-track-tab="experience">经历</button>
+                  <button type="button" class="bs-bt-track-tab" data-track-tab="diary">心情</button>
+                </div>
+                <div id="bs-bt-track-content" class="bs-bt-track-content"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-full-state" class="bs-bt-view" data-view="full-state">
+          <div class="bs-bt-panel">
+            <div class="settings_section">
+              <div class="bs-bt-status-title">全角色时间推进</div>
+
+              <div style="display: grid; gap: 8px;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                  <label>
+                    <div style="text-align: center; font-size: 0.85em; margin-bottom: 2px;">年</div><input
+                      id="bs-bt-time-year" type="number" class="text_pole" value="0" min="0"
+                      style="text-align: center;" />
+                  </label>
+                  <label>
+                    <div style="text-align: center; font-size: 0.85em; margin-bottom: 2px;">月</div><input
+                      id="bs-bt-time-month" type="number" class="text_pole" value="0" min="0"
+                      style="text-align: center;" />
+                  </label>
+                  <label>
+                    <div style="text-align: center; font-size: 0.85em; margin-bottom: 2px;">周</div><input
+                      id="bs-bt-time-week" type="number" class="text_pole" value="0" min="0"
+                      style="text-align: center;" />
+                  </label>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                  <label>
+                    <div style="text-align: center; font-size: 0.85em; margin-bottom: 2px;">天</div><input
+                      id="bs-bt-time-day" type="number" class="text_pole" value="0" min="0"
+                      style="text-align: center;" />
+                  </label>
+                  <label>
+                    <div style="text-align: center; font-size: 0.85em; margin-bottom: 2px;">时</div><input
+                      id="bs-bt-time-hour" type="number" class="text_pole" value="0" min="0"
+                      style="text-align: center;" />
+                  </label>
+                  <label>
+                    <div style="text-align: center; font-size: 0.85em; margin-bottom: 2px;">分</div><input
+                      id="bs-bt-time-minute" type="number" class="text_pole" value="0" min="0"
+                      style="text-align: center;" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="settings_section bs-bt-action-row" style="margin-top:12px;">
+                <button id="bs-bt-time-lapse-submit" class="menu_button" type="button">推进所有角色</button>
+              </div>
+
+              <pre id="bs-bt-time-lapse-status" class="bs-bt-status-box"
+                style="margin-top:12px;">准备就绪：这里会推进当前聊天内所有已注册角色的生理时间。</pre>
+            </div>
+
+            <hr class="sysHR" />
+
+            <div class="settings_section">
+              <div class="bs-bt-status-title">完整变量</div>
+              <div id="bs-bt-home-full-state-list" class="bs-bt-theme-list"></div>
+            </div>
+
+            <hr class="sysHR" />
+
+            <div class="settings_section">
+              <div class="bs-bt-track-tabs bs-bt-full-state-tabs" id="bs-bt-full-state-tabs">
+                <button type="button" class="bs-bt-track-tab" data-full-state-tab="variables">变量内容</button>
+                <button type="button" class="bs-bt-track-tab" data-full-state-tab="debug">调试工具</button>
+              </div>
+            </div>
+
+            <div id="bs-bt-full-state-vars-panel" class="settings_section">
+              <div class="bs-bt-status-title">变量内容</div>
+              <textarea id="bs-bt-full-state-output" class="text_pole bs-bt-textarea" rows="18" spellcheck="false">请选择角色查看完整变量。</textarea>
+              <div id="bs-bt-full-state-edit-status" class="bs-bt-inline-status">可直接编辑 JSON，应用前会检查格式与基础结构。</div>
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-full-state-apply" class="menu_button" type="button" disabled>应用修改</button>
+                <button id="bs-bt-full-state-reset" class="menu_button" type="button" disabled>重置显示</button>
+              </div>
+
+              <div id="bs-bt-child-move-section" class="settings_section" hidden>
+                <div class="bs-bt-status-title">搬移孩子记录</div>
+                <label for="bs-bt-child-move-source">要搬走的孩子</label>
+                <select id="bs-bt-child-move-source" class="text_pole"></select>
+                <label for="bs-bt-child-move-target">转交给（归属方）</label>
+                <select id="bs-bt-child-move-target" class="text_pole"></select>
+                <div id="bs-bt-child-move-status" class="bs-bt-inline-status">只能转交给 provider 指定且已注册的归属方。</div>
+                <div class="settings_section bs-bt-action-row">
+                  <button id="bs-bt-child-move-apply" class="menu_button" type="button">搬移</button>
+                </div>
+              </div>
+
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-full-state-unregister" class="menu_button" type="button" disabled>注销当前角色</button>
+              </div>
+            </div>
+
+            <div id="bs-bt-full-state-debug-section" class="settings_section">
+              <div class="bs-bt-status-title">调试工具</div>
+              <div id="bs-bt-full-state-debug-panel"></div>
+            </div>
+
+            <div id="bs-bt-full-state-confirm" class="settings_section" style="display:none;">
+              <div class="bs-bt-status-title">注销确认</div>
+              <pre id="bs-bt-full-state-confirm-text" class="bs-bt-status-box">请选择角色。</pre>
+              <div class="settings_section bs-bt-action-row">
+                <button id="bs-bt-full-state-confirm-yes" class="menu_button" type="button">确认注销</button>
+                <button id="bs-bt-full-state-confirm-no" class="menu_button" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="bs-bt-view-race-encyclopedia" class="bs-bt-view" data-view="race-encyclopedia">
+          <div class="bs-bt-panel">
+            <div class="settings_section">
+              <div id="bs-bt-race-count" class="bs-bt-status-title">内置种族数量：0</div>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-track-tabs" id="bs-bt-encyclopedia-tabs">
+                <button type="button" class="bs-bt-track-tab is-active" data-encyclopedia-tab="race">一般类型</button>
+                <button type="button" class="bs-bt-track-tab" data-encyclopedia-tab="derived">衍生类型</button>
+              </div>
+            </div>
+
+            <div class="bs-bt-encyclopedia-page is-active" data-encyclopedia-page="race">
+
+            <div class="settings_section">
+              <label for="bs-bt-race-select">选择种族</label>
+              <select id="bs-bt-race-select" class="text_pole">
+                <option value="">请选择种族</option>
+              </select>
+            </div>
+
+            <div class="settings_section">
+              <button id="bs-bt-race-open-editor" class="menu_button" type="button">调整参数</button>
+              <div id="bs-bt-race-editor-modal" class="bs-bt-race-editor-modal" hidden>
+                <div class="bs-bt-race-editor-dialog">
+                  <div class="bs-bt-race-editor-head">
+                    <div id="bs-bt-race-editor-title" class="bs-bt-status-title">种族参数覆盖</div>
+                    <button id="bs-bt-race-editor-close" class="bs-bt-race-close-button" type="button" aria-label="关闭参数覆盖">×</button>
+                  </div>
+                  <div id="bs-bt-race-editor" class="bs-bt-race-editor"></div>
+                  <div class="settings_section bs-bt-action-row">
+                    <button id="bs-bt-race-use-human" class="menu_button" type="button">套用人类值</button>
+                    <button id="bs-bt-race-save-override" class="menu_button" type="button">保存覆盖</button>
+                    <button id="bs-bt-race-reset-override" class="menu_button" type="button">恢复内置</button>
+                  </div>
+                  <div id="bs-bt-race-editor-status" class="bs-bt-inline-status">物种短敘述可留空；数值只保存与内置值不同的字段；产后恢复天数由系统公式与指令流程处理。</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-status-title">种族资料</div>
+              <pre id="bs-bt-race-output" class="bs-bt-status-box">请选择种族查看资料。</pre>
+            </div>
+            </div>
+
+            <div class="bs-bt-encyclopedia-page" data-encyclopedia-page="derived" hidden>
+            <div class="settings_section">
+              <label for="bs-bt-derived-select">选择衍生</label>
+              <select id="bs-bt-derived-select" class="text_pole">
+                <option value="">请选择衍生</option>
+              </select>
+            </div>
+
+            <div class="settings_section">
+              <button id="bs-bt-derived-open-editor" class="menu_button" type="button">调整参数</button>
+              <div id="bs-bt-derived-editor-modal" class="bs-bt-race-editor-modal" hidden>
+                <div class="bs-bt-race-editor-dialog">
+                  <div class="bs-bt-race-editor-head">
+                    <div id="bs-bt-derived-editor-title" class="bs-bt-status-title">衍生参数覆盖</div>
+                    <button id="bs-bt-derived-editor-close" class="bs-bt-race-close-button" type="button" aria-label="关闭衍生参数覆盖">×</button>
+                  </div>
+                  <div id="bs-bt-derived-editor" class="bs-bt-race-editor"></div>
+                  <div class="settings_section bs-bt-action-row">
+                    <button id="bs-bt-derived-save-override" class="menu_button" type="button">保存覆盖</button>
+                    <button id="bs-bt-derived-reset-override" class="menu_button" type="button">恢复内置</button>
+                  </div>
+                  <div id="bs-bt-derived-editor-status" class="bs-bt-inline-status">只保存与内置值不同的字段；代谢抵免维持内置规则，子项会继承所属衍生大类。</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings_section">
+              <div class="bs-bt-status-title">衍生资料</div>
+              <pre id="bs-bt-derived-output" class="bs-bt-status-box">请选择衍生查看 Flux 资料。</pre>
+            </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="bs-bt-power-off-screen" class="bs-bt-power-off-overlay">
+        <div>𓃠<br />~nya</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bs-bt-physical-buttons">
+    <button id="bs-bt-system-button" class="bs-bt-physical-button" type="button" title="SYSTEM" aria-label="SYSTEM">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+        aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+        </path>
+      </svg>
+    </button>
+    <button id="bs-bt-home-button" class="bs-bt-physical-button" type="button" title="HOME" aria-label="HOME">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+        aria-hidden="true">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+      </svg>
+    </button>
+    <button id="bs-bt-close" class="bs-bt-physical-button bs-bt-physical-button-off" type="button" title="CLOSE"
+      aria-label="CLOSE">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+        aria-hidden="true">
+        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+        <line x1="12" y1="2" x2="12" y2="12"></line>
+      </svg>
+    </button>
+  </div>
+</div>
