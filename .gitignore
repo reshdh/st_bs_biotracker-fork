@@ -4,3 +4,10 @@ node_modules/
 __pycache__/
 bastneth.code-workspace
 .claude/
+
+# 开发文档与临时文件，不进仓库
+trellis/
+_*.md
+_*.mjs
+_*.js
+_full.json
