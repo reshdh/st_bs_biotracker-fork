@@ -48,6 +48,7 @@ import { buildMainFlowPrompt, resetPoller, runTracker } from './scripts/tracker.
 import { getLibidoLines, getMilkCapacityFromDays, getUrineHardCap, getUrineLevel, getUrineUrgeCap } from './scripts/metabolism_config.js';
 import { getStoolCap, getStoolLevel, getStoolLines, getStoolUrge } from './scripts/stool_engine.js';
 import { applyToolCall, getLibidoView } from './scripts/tools.js';
+import { getCharacterStatusTags } from './scripts/status_tag_matrix.js';
 import { getVitalitySoftCap } from './scripts/vitality_config.js';
 import { getEmbryoTypeReferenceText } from './scripts/embryo_prompt_context.js';
 import { buildSingleRacePhysiologyText } from './scripts/race_prompt_context.js';
@@ -78,6 +79,7 @@ import {
   getChatKey,
   getChatState,
   getContextSafe,
+  getApiUrlForFormat,
   inheritChatStateFromMatchingChat,
   isChatStateEffectivelyEmpty,
   getResolvedCharacter,
@@ -87,6 +89,7 @@ import {
   loadCharacterAdditionalWorldBooks,
   loadGlobalWorldBook,
   MODULE_NAME,
+  normalizeApiFormat,
   normalizeCharacterPsychologyState,
   recordChatStateSnapshot,
   resolveRegisteredCharacterName,
@@ -95,6 +98,7 @@ import {
   THEME_CONFIG,
   worldbookSelectionMatches,
 } from './scripts/state.js';
+import { buildLineageView, relatedNodeIds } from './scripts/lineage_view.js';
 
 const PANEL_ID = 'bs-biotracker-settings';
 const MODAL_ID = 'bs-biotracker-modal';
@@ -2511,6 +2515,64 @@ function getMetabolismNeedItems(summary) {
   return items.filter(Boolean);
 }
 
+// 代谢需求四阶纯视觉状态机（TASK-14）：不写中文档名，仅靠图标充盈度、
+// 双色液面与边框呼吸光区分生理状态。flux 双极性不参与单向溢出状态机。
+function getMetabolismNeedState(item) {
+  if (!item || item.key === 'flux') return null;
+  const value = Number(item.value) || 0;
+  const urge = Number(item.urge) > 0 ? Number(item.urge) : 100;
+  const cap = Number(item.cap) > 0 ? Number(item.cap) : 150;
+  const level = item.level;
+  if (item.key === 'stool') {
+    // 便意段号 0~5：0/1 平静，2/3 充盈（已过 urge），4 憋耐（discomfort），5 极限（pain）
+    const seg = Number(level);
+    if (!Number.isFinite(seg)) return 'calm';
+    if (seg >= 5) return 'critical';
+    if (seg >= 4) return 'urgent';
+    if (seg >= 2) return 'filled';
+    return 'calm';
+  }
+  if (level === '爆') return 'critical';
+  if (value > urge) return 'urgent';
+  if (value >= urge || level === '满' || level === '高') return 'filled';
+  return 'calm';
+}
+
+const NEED_VALUE_DISPLAY_MODE_KEY = 'bs_bt_need_display_mode';
+const NEED_DISPLAY_MODES = ['raw', 'urge', 'cap'];
+let needDisplayMode = 'raw';
+try {
+  const savedMode = globalThis.localStorage?.getItem(NEED_VALUE_DISPLAY_MODE_KEY);
+  if (NEED_DISPLAY_MODES.includes(savedMode)) needDisplayMode = savedMode;
+} catch {}
+
+function cycleNeedDisplayMode() {
+  const nextIdx = (NEED_DISPLAY_MODES.indexOf(needDisplayMode) + 1) % NEED_DISPLAY_MODES.length;
+  needDisplayMode = NEED_DISPLAY_MODES[nextIdx];
+  try {
+    globalThis.localStorage?.setItem(NEED_VALUE_DISPLAY_MODE_KEY, needDisplayMode);
+  } catch {}
+  updateNeedValuesDisplay();
+}
+
+function updateNeedValuesDisplay() {
+  document.querySelectorAll('.bs-bt-need-value[data-val-urge]').forEach((el) => {
+    const raw = el.getAttribute('data-val-raw');
+    const urge = el.getAttribute('data-val-urge');
+    const cap = el.getAttribute('data-val-cap');
+    if (needDisplayMode === 'urge') {
+      el.textContent = urge;
+      el.classList.add('is-capped-mode');
+    } else if (needDisplayMode === 'cap') {
+      el.textContent = cap;
+      el.classList.add('is-capped-mode');
+    } else {
+      el.textContent = raw;
+      el.classList.remove('is-capped-mode');
+    }
+  });
+}
+
 function renderMetabolismNeedIcon(item) {
   const key = String(item?.key || '');
   const value = Number(item?.value) || 0;
@@ -2528,12 +2590,29 @@ function renderMetabolismNeedIcon(item) {
   const tone = key === 'flux'
     ? value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'
     : value >= urge ? 'high' : 'normal';
+  const state = getMetabolismNeedState(item);
+  const stateClass = state ? ` bs-bt-need-tile--state-${state}` : '';
+  const fillRatio = key === 'flux' ? 0 : (fill / 100).toFixed(3);
   const title = `${item.label}: ${item.level}${key === 'flux' ? '' : ` (${Math.round(value)})`}`;
+  const roundedValue = Math.round(value);
+  const roundedUrge = Math.round(urge);
+  const roundedCap = Math.round(cap);
+  const isCapped = needDisplayMode !== 'raw' && key !== 'flux';
+  const cappedClass = isCapped ? ' is-capped-mode' : '';
   const displayValue = key === 'flux'
     ? (value > 0 ? '正极' : value < 0 ? '负极' : '平衡')
-    : String(Math.round(value));
+    : needDisplayMode === 'urge'
+      ? `${roundedValue}/${roundedUrge}`
+      : needDisplayMode === 'cap'
+        ? `${roundedValue}/${roundedCap}`
+        : String(roundedValue);
+
+  const dataAttrs = key === 'flux'
+    ? ''
+    : ` data-val-raw="${roundedValue}" data-val-urge="${roundedValue}/${roundedUrge}" data-val-cap="${roundedValue}/${roundedCap}" title="点击切换上限显示：当前值(${roundedValue}) → 对满格线(${roundedValue}/${roundedUrge}) → 对硬上限(${roundedValue}/${roundedCap})"`;
+
   return `
-    <div class="bs-bt-need-tile bs-bt-need-tile--${escapeHtml(key)} bs-bt-need-tile--${tone}" aria-label="${escapeHtml(title)}">
+    <div class="bs-bt-need-tile bs-bt-need-tile--${escapeHtml(key)} bs-bt-need-tile--${tone}${stateClass}" style="--bs-bt-need-fill-ratio: ${fillRatio};" aria-label="${escapeHtml(title)}">
       <span class="bs-bt-need-icon-wrap" style="--bs-bt-need-fill: ${fill.toFixed(1)}%; --bs-bt-need-overfill: ${overfill.toFixed(1)}%;">
         <span class="bs-bt-need-icon bs-bt-need-icon--${escapeHtml(key)} bs-bt-need-icon-base" aria-hidden="true"></span>
         <span class="bs-bt-need-icon-fill" aria-hidden="true">
@@ -2544,7 +2623,7 @@ function renderMetabolismNeedIcon(item) {
         </span>`}
       </span>
       <span class="bs-bt-need-label">${escapeHtml(item.label)}</span>
-      <span class="bs-bt-need-value">${escapeHtml(displayValue)}</span>
+      <span class="bs-bt-need-value${cappedClass}"${dataAttrs}>${escapeHtml(displayValue)}</span>
     </div>
   `;
 }
@@ -2552,7 +2631,44 @@ function renderMetabolismNeedIcon(item) {
 function renderMetabolismSummary(summary) {
   if (typeof summary === 'string') return `<div>${escapeHtml(summary)}</div>`;
   const items = getMetabolismNeedItems(summary);
-  return `<div class="bs-bt-track-metabolism-grid${summary?.derived ? ' is-derived' : ''}">${items.map(renderMetabolismNeedIcon).join('')}</div>`;
+  // 多 Critical 传染抑制：超过 2 个极限格子时，仅溢出比例最高者保持脉冲，
+  // 其余降级为静态红框——所有格子都在呼吸时，呼吸就失去意义了。
+  const states = items.map(getMetabolismNeedState);
+  const criticalIdxs = states.map((s, i) => (s === 'critical' ? i : -1)).filter((i) => i >= 0);
+  let quietIdxs = new Set();
+  let globalState = null;
+  if (criticalIdxs.length > 0) {
+    globalState = 'critical';
+    if (criticalIdxs.length > 2) {
+      const ranked = [...criticalIdxs].sort((a, b) => {
+        const ratioOf = (item) => {
+          const cap = Number(item?.cap) > 0 ? Number(item.cap) : 150;
+          const urge = Number(item?.urge) > 0 ? Number(item.urge) : 100;
+          return cap > urge ? (Number(item?.value) - urge) / (cap - urge) : 0;
+        };
+        return ratioOf(items[b]) - ratioOf(items[a]);
+      });
+      quietIdxs = new Set(ranked.slice(1));
+    }
+  } else if (states.includes('urgent')) {
+    globalState = 'urgent';
+  } else if (states.includes('filled')) {
+    globalState = 'filled';
+  }
+  const html = items.map((item, i) => {
+    let out = renderMetabolismNeedIcon(item);
+    if (quietIdxs.has(i)) {
+      out = out.replace('bs-bt-need-tile--state-critical', 'bs-bt-need-tile--state-critical bs-bt-need-tile--state-critical-quiet');
+    }
+    return out;
+  }).join('');
+  // 悬浮球全局状态：球体随最紧急需求变色，不展开面板也能感知角色状态
+  const sphere = document.getElementById('bs-bt-floating-sphere');
+  if (sphere) {
+    if (globalState) sphere.dataset.needState = globalState;
+    else delete sphere.dataset.needState;
+  }
+  return `<div class="bs-bt-track-metabolism-grid${summary?.derived ? ' is-derived' : ''}">${html}</div>`;
 }
 
 function parseDescriptionBlocks(text) {
@@ -2784,6 +2900,35 @@ function renderWardrobeCharacterList(characters = []) {
   }).join('');
 }
 
+const PREGFIT_DIM_LABELS = { masking: '遮蔽', support: '承托', capacity: '余裕', convenience: '便利' };
+
+function renderPregFitGauge(pregFit) {
+  const pressure = Number(pregFit?.pregWearPressure);
+  if (!Number.isFinite(pressure)) return '';
+  const fillPct = Math.max(0, Math.min(100, (pressure / 10) * 100));
+  const gap = pregFit?.gap || {};
+  const dims = Object.keys(PREGFIT_DIM_LABELS).map((key) => {
+    const value = Number(gap[key]);
+    const safeValue = Number.isFinite(value) ? value : 0;
+    const isOverwhelmed = safeValue < 0;
+    const sign = safeValue > 0 ? '+' : '';
+    return `<span class="bs-bt-pregfit__dim${isOverwhelmed ? ' is-overwhelmed' : ''}">
+      <span class="bs-bt-pregfit__dim-label">${escapeHtml(PREGFIT_DIM_LABELS[key])}</span>
+      <span class="bs-bt-pregfit__dim-value">${sign}${escapeHtml(formatFixedDisplay(safeValue, 1))}</span>
+    </span>`;
+  }).join('');
+  return `
+    <div class="bs-bt-pregfit">
+      <div class="bs-bt-pregfit__head">
+        <span class="bs-bt-pregfit__label">孕期衣着压力</span>
+        <span class="bs-bt-pregfit__value">${escapeHtml(formatFixedDisplay(pressure, 1))}<span class="bs-bt-pregfit__scale">/10</span></span>
+      </div>
+      <div class="bs-bt-pregfit__bar"><div class="bs-bt-pregfit__bar-fill" style="width:${fillPct}%"></div></div>
+      <div class="bs-bt-pregfit__dims">${dims}</div>
+    </div>
+  `;
+}
+
 function renderWardrobeCharacterPage(character) {
   const profile = character?.profile || {};
   if (profile?.wardrobe?.enabled !== true) {
@@ -2795,8 +2940,7 @@ function renderWardrobeCharacterPage(character) {
     </div>`;
   }
   const outfit = buildOutfitView(profile);
-  const pressure = Number(outfit?.pregFit?.pregWearPressure);
-  const pressureTag = Number.isFinite(pressure) ? '<span class="bs-bt-wardrobe-pressure-tag">孕衣压 ' + escapeHtml(formatFixedDisplay(pressure, 1)) + '</span>' : '';
+  const pregFitHtml = renderPregFitGauge(outfit?.pregFit);
   const currentIds = new Set([outfit.main?.id, ...(outfit.accessories || []).map((item) => item.id)].filter((id) => id !== undefined && id !== null));
   const items = getWardrobeItems(profile).filter((item) => Number(item?.id) !== 0);
   const mainItems = items.filter((item) => item.slot !== 'accessory');
@@ -2814,9 +2958,10 @@ function renderWardrobeCharacterPage(character) {
       </div>
       <div class="bs-bt-wardrobe-page-title">${escapeHtml(character?.name || '未命名')}</div>
       <div class="bs-bt-wardrobe-current">
-        <div class="bs-bt-wardrobe-current-head"><div class="bs-bt-wardrobe-group-title">当前穿着</div>${pressureTag}</div>
+        <div class="bs-bt-wardrobe-current-head"><div class="bs-bt-wardrobe-group-title">当前穿着</div></div>
         <div class="bs-bt-wardrobe-summary"><b>主件</b>${escapeHtml(outfit.main?.name || '全裸')}</div>
         <div class="bs-bt-wardrobe-summary"><b>配件</b>${escapeHtml((outfit.accessories || []).length > 0 ? outfit.accessories.map((item) => item.name || item.id).join('、') : '无')}</div>
+        ${pregFitHtml}
         <div class="bs-bt-wardrobe-outfit-editor">
           <label>主件<select id="bs-bt-wardrobe-outfit-main" class="text_pole">
             <option value="0"${Number(outfit.main?.id) === 0 ? ' selected' : ''}>全裸</option>
@@ -2989,6 +3134,7 @@ function buildTrackCharacterViewModel(character) {
   const totalSperm = (Array.isArray(base.sperms) ? base.sperms : []).reduce((sum, item) => sum + (Number(item?.value) || 0), 0);
   return {
     name: character?.name || '未命名',
+    statusTags: getCharacterStatusTags(character),
     base: {
       stage,
     },
@@ -3257,12 +3403,22 @@ function renderCardCarouselSection(title, items, renderCard, emptyText, kind, op
           }
         </span>
       </div>
+      ${options.lead ? `<div class="bs-bt-track-section-lead">${options.lead}</div>` : ''}
       <div class="bs-bt-track-cards bs-bt-track-cards--single">${renderCard(currentItem, currentIndex)}</div>
     </div>
   `;
 }
 
 function renderTrackOverview(viewModel) {
+  const statusTags = Array.isArray(viewModel.statusTags) ? viewModel.statusTags : [];
+  const visibleTags = statusTags.slice(0, 5);
+  const hiddenTags = statusTags.slice(5);
+  const statusBarHtml = statusTags.length > 0
+    ? `<div class="bs-bt-status-bar">
+        ${visibleTags.map((tag) => `<span class="bs-bt-tag ${escapeHtml(tag?.className || '')}" data-tooltip="${escapeHtml(tag?.tooltip || tag?.label || '')}">${escapeHtml(tag?.label || '')}</span>`).join('')}
+        ${hiddenTags.length > 0 ? `<span class="bs-bt-tag bs-bt-tag--more" data-tooltip="${escapeHtml(hiddenTags.map((t) => `${t?.label || ''}：${t?.tooltip || ''}`).join('\n'))}">+${hiddenTags.length}</span>` : ''}
+      </div>`
+    : '';
   const progress = viewModel.overview.stageProgress;
   const currentStage = viewModel.overview.stage;
   const stageBadge = viewModel.pregnancy?.showLaborFields
@@ -3284,6 +3440,7 @@ function renderTrackOverview(viewModel) {
   return `
     <div class="bs-bt-track-section">
       <div class="bs-bt-track-section-title">角色概览</div>
+      ${statusBarHtml}
       <div class="bs-bt-track-meta">
         <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">姓名</span><span class="bs-bt-track-meta-value">${escapeHtml(viewModel.name)}</span></div>
         <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">种族</span><span class="bs-bt-track-meta-value">${escapeHtml(viewModel.overview.raceLabel)}</span></div>
@@ -3334,6 +3491,54 @@ function renderTrackPsychology(viewModel) {
   `;
 }
 
+const SPERM_SHARE_STEPS = [1, 0.68, 0.46, 0.32, 0.22, 0.16];
+
+function renderSpermShareChart(sperms) {
+  const items = (Array.isArray(sperms) ? sperms : [])
+    .map((item) => ({ male: String(item?.male || '未知'), value: Math.max(0, Number(item?.value) || 0) }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+  if (items.length < 2) return '';
+
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (total <= 0) return '';
+
+  const radius = 30;
+  const circumference = 2 * Math.PI * radius;
+  const gap = Math.min(2, circumference / (items.length * 6));
+  const drawable = circumference - gap * items.length;
+  let offset = 0;
+  const segments = items.map((item, index) => {
+    const length = (item.value / total) * drawable;
+    const dash = `${length.toFixed(2)} ${(circumference - length).toFixed(2)}`;
+    const seg = `<circle cx="40" cy="40" r="${radius}" fill="none" stroke="currentColor"
+      stroke-width="14" stroke-opacity="${SPERM_SHARE_STEPS[index % SPERM_SHARE_STEPS.length]}"
+      stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(2)}" />`;
+    offset += length + gap;
+    return seg;
+  }).join('');
+
+  const legend = items.map((item, index) => `
+    <div class="bs-bt-sperm-share__row">
+      <span class="bs-bt-sperm-share__swatch" style="opacity:${SPERM_SHARE_STEPS[index % SPERM_SHARE_STEPS.length]}"></span>
+      <span class="bs-bt-sperm-share__name">${escapeHtml(item.male)}</span>
+      <span class="bs-bt-sperm-share__pct">${Math.round((item.value / total) * 100)}%</span>
+      <span class="bs-bt-sperm-share__val">${Math.round(item.value)}</span>
+    </div>
+  `).join('');
+
+  return `
+    <div class="bs-bt-sperm-share">
+      <svg class="bs-bt-sperm-share__ring" viewBox="0 0 80 80" role="img" aria-label="精液来源占比">
+        <g transform="rotate(-90 40 40)">${segments}</g>
+        <text x="40" y="38" text-anchor="middle" class="bs-bt-sperm-share__total">${Math.round(total)}</text>
+        <text x="40" y="50" text-anchor="middle" class="bs-bt-sperm-share__unit">总残留</text>
+      </svg>
+      <div class="bs-bt-sperm-share__legend">${legend}</div>
+    </div>
+  `;
+}
+
 function renderTrackPregnancy(viewModel) {
   const data = viewModel.pregnancy;
   const gestationModifier = data.gestationModifier || {};
@@ -3377,7 +3582,7 @@ function renderTrackPregnancy(viewModel) {
         </div>`,
       '当前无精液残留',
       'sperms',
-      { badge: fertilityBadge },
+      { badge: fertilityBadge, lead: renderSpermShareChart(data.sperms) },
     )}
     ${data.showPregnantFields
       ? `${renderCardCarouselSection(
@@ -3564,21 +3769,193 @@ function renderTrackExperience(viewModel) {
       </div>
     </div>
     ${renderTrackSkillSection(viewModel)}
-    ${renderCardCarouselSection(
-      '孩子记录',
-        viewModel.experience.children,
-        (item, index) => `<div class="bs-bt-track-card">
-          <div class="bs-bt-track-card-title">${escapeHtml(item?.name || `孩子 ${index + 1}`)}</div>
-          <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">父方</span><span class="bs-bt-track-list-value">${escapeHtml(item?.fathers || '未知')}</span></div>
-          <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">性别</span><span class="bs-bt-track-list-value">${escapeHtml(item?.gender || '未知')}</span></div>
-          <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">种族</span><span class="bs-bt-track-list-value">${escapeHtml(formatRaceLabel(item?.race, item?.derivedType))}</span></div>
-          <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">年龄</span><span class="bs-bt-track-list-value">${escapeHtml(formatIntegerDisplay(item?.age))}</span></div>
-          <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">待注册天赋</span><span class="bs-bt-track-list-value">${escapeHtml((Array.isArray(item?.talents) ? item.talents : []).map((talent) => `${talent.name}：${talent.label}`).join('、') || '无')}</span></div>
-        </div>`,
-        '当前无孩子记录',
-      'children',
-    )}
+    ${renderTrackLineageEntry(viewModel)}
   `;
+}
+
+function renderTrackLineageEntry(viewModel) {
+  const children = Array.isArray(viewModel?.experience?.children) ? viewModel.experience.children : [];
+  const name = String(viewModel?.name || '').trim();
+  const summary = children.length > 0
+    ? `共 ${children.length} 名子女`
+    : '暂无子女记录';
+  return `
+    <div class="bs-bt-track-section">
+      <div class="bs-bt-track-section-title">血缘</div>
+      <div class="bs-bt-track-meta">
+        <div class="bs-bt-track-meta-row">
+          <span class="bs-bt-track-meta-label">${escapeHtml(summary)}</span>
+          <button type="button" class="menu_button bs-bt-lineage-open" data-lineage-center="${escapeHtml(name)}">族谱</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+const LINEAGE_ID = 'bs-bt-lineage';
+
+function lineageDetailRows(node) {
+  if (!node) return '';
+  const rows = [
+    ['种族', node.raceLabel || '未知'],
+    ['性别', node.gender || '—'],
+    ['世代', node.generation === 0 ? '本人' : (node.generation < 0 ? `上${Math.abs(node.generation)}代` : `下${node.generation}代`)],
+    ['亲代', node.geneticParents.map((item) => `${item.relation}：${item.name}`).join('、') || '无记录'],
+    ['子代', node.children.map((item) => item.name).join('、') || '无记录'],
+  ];
+  if (node.carriers.length > 0) rows.push(['孕育者', `${node.carriers.map((item) => item.name).join('、')}（代孕承载）`]);
+  if (node.carriedChildren.length > 0) rows.push(['代孕承载', node.carriedChildren.map((item) => item.name).join('、')]);
+  if (node.kind === 'unregistered') rows.push(['状态', '未注册（仅作为亲代出现）']);
+  if (node.kind === 'character' && node.childId && node.parents.length === 0) {
+    rows.push(['出身', '在本故事中出生（上代未显示）']);
+  }
+  if (Array.isArray(node.extraSources) && node.extraSources.length > 0) {
+    rows.push(['其他来源', `${node.extraSources.join('、')}（嵌合体，仅首位连线）`]);
+  }
+  return rows
+    .map(([label, value]) => `<div class="bs-bt-lineage__detail-row"><span class="bs-bt-lineage__detail-label">${escapeHtml(label)}</span><span class="bs-bt-lineage__detail-value">${escapeHtml(String(value))}</span></div>`)
+    .join('');
+}
+
+function lineageInitial(name) {
+  const text = String(name || '').trim();
+  if (!text) return '?';
+  if (/^[a-z0-9][a-z0-9\s._'-]*$/i.test(text)) {
+    const words = text.split(/[\s._-]+/).filter(Boolean);
+    if (words.length > 1) return (words[0][0] + words[1][0]).toUpperCase();
+    return text.slice(0, 2).toUpperCase();
+  }
+  return [...text].slice(0, 2).join('');
+}
+
+const LINEAGE_SEX_GLYPHS = { 男: '♂', 女: '♀', 雄: '♂', 雌: '♀' };
+
+function lineageSexGlyph(node) {
+  const gender = String(node?.gender || '').trim();
+  if (!gender) return '';
+  for (const [key, glyph] of Object.entries(LINEAGE_SEX_GLYPHS)) {
+    if (gender.includes(key)) return glyph;
+  }
+  return '⚥';
+}
+
+function renderLineageCard(node) {
+  const sex = lineageSexGlyph(node);
+  const sub = node.raceLabel || (node.kind === 'unregistered' ? '未注册' : '—');
+  return `
+    <button type="button"
+      class="bs-bt-lineage__card${node.isCenter ? ' is-center' : ''}${node.kind === 'unregistered' ? ' is-ghost' : ''}"
+      data-lineage-node="${escapeHtml(node.id)}"
+      ${node.hasDetail ? '' : 'disabled'}>
+      <span class="bs-bt-lineage__portrait">
+        <span class="bs-bt-lineage__initial">${escapeHtml(lineageInitial(node.displayName))}</span>
+        ${sex ? `<span class="bs-bt-lineage__sex">${sex}</span>` : ''}
+      </span>
+      <span class="bs-bt-lineage__card-name">${escapeHtml(node.displayName)}</span>
+      <span class="bs-bt-lineage__card-sub">${escapeHtml(sub)}</span>
+      ${node.isCenter ? '<span class="bs-bt-lineage__badge">本人</span>' : ''}
+    </button>
+  `;
+}
+
+function renderLineageCluster(cluster) {
+  const caption = cluster.parents
+    .map((item) => `${item.relation} ${item.name}`)
+    .join(' × ');
+  return `
+    <div class="bs-bt-lineage__cluster">
+      ${caption ? `<div class="bs-bt-lineage__cluster-parents">${escapeHtml(caption)}</div>` : ''}
+      <div class="bs-bt-lineage__cluster-cards${caption ? ' has-link' : ''}">
+        ${cluster.nodes.map(renderLineageCard).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderLineageChart(view) {
+  if (view.empty) {
+    return `<div class="bs-bt-lineage__empty">找不到 ${escapeHtml(view.centerName)} 的血缘记录。</div>`;
+  }
+  return view.generations
+    .map((row) => `
+      <div class="bs-bt-lineage__row">
+        <div class="bs-bt-lineage__row-label"><span>${escapeHtml(row.label)}</span></div>
+        <div class="bs-bt-lineage__row-scroll">
+          <div class="bs-bt-lineage__clusters">
+            ${row.clusters.map(renderLineageCluster).join('')}
+          </div>
+        </div>
+      </div>
+    `)
+    .join('');
+}
+
+let lineageViewCache = null;
+
+function selectLineageNode(nodeId) {
+  const root = document.getElementById(LINEAGE_ID);
+  if (!root || !lineageViewCache) return;
+  const node = lineageViewCache.nodes.find((item) => item.id === nodeId) || null;
+  const related = new Set(node ? relatedNodeIds(lineageViewCache, nodeId) : []);
+  root.classList.toggle('has-selection', Boolean(node));
+  root.querySelectorAll('[data-lineage-node]').forEach((cell) => {
+    const id = cell.dataset.lineageNode;
+    cell.classList.toggle('is-selected', Boolean(node) && id === nodeId);
+    cell.classList.toggle('is-related', related.has(id));
+  });
+  const detail = root.querySelector('.bs-bt-lineage__detail');
+  if (!detail) return;
+  detail.innerHTML = node
+    ? `<div class="bs-bt-lineage__detail-title">${escapeHtml(node.displayName)}</div>${lineageDetailRows(node)}`
+    : '<div class="bs-bt-lineage__detail-title">选择一个人查看详情</div>';
+}
+
+function ensureLineageWindow(ctx) {
+  let root = document.getElementById(LINEAGE_ID);
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = LINEAGE_ID;
+  root.className = `bs-bt-lineage theme-${getSettings(ctx).theme || 'retro'}`;
+  root.innerHTML = `
+    <div class="bs-bt-lineage__head">
+      <div class="bs-bt-lineage__title"></div>
+      <div class="bs-bt-lineage__hint">点选查看关系</div>
+      <button type="button" class="bs-bt-lineage__close" aria-label="关闭">×</button>
+    </div>
+    <div class="bs-bt-lineage__body">
+      <div class="bs-bt-lineage__chart"></div>
+      <div class="bs-bt-lineage__detail"></div>
+    </div>
+  `;
+  document.body.appendChild(root);
+  root.querySelector('.bs-bt-lineage__close')?.addEventListener('click', () => closeLineageWindow());
+  root.querySelector('.bs-bt-lineage__chart')?.addEventListener('click', (event) => {
+    const cell = event.target?.closest?.('[data-lineage-node]');
+    if (!cell || cell.disabled) return;
+    selectLineageNode(cell.dataset.lineageNode);
+  });
+  return root;
+}
+
+function closeLineageWindow() {
+  const root = document.getElementById(LINEAGE_ID);
+  if (!root) return;
+  root.classList.remove('is-open', 'has-selection');
+  lineageViewCache = null;
+}
+
+function openLineageWindow(ctx, centerName) {
+  const settings = getSettings(ctx);
+  const chatState = getChatState(ctx, settings);
+  const view = buildLineageView(chatState, centerName);
+  lineageViewCache = view;
+  const root = ensureLineageWindow(ctx);
+  root.className = `bs-bt-lineage theme-${settings.theme || 'retro'}`;
+  root.querySelector('.bs-bt-lineage__title').textContent = `${centerName} 的血缘`;
+  root.querySelector('.bs-bt-lineage__chart').innerHTML = renderLineageChart(view);
+  root.classList.add('is-open');
+  selectLineageNode(view.empty ? null : view.centerId);
+  root.querySelector('.bs-bt-lineage__card.is-center')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function renderTrackDiary(viewModel) {
@@ -5069,6 +5446,9 @@ function applyTheme(settings) {
   document.querySelectorAll('#bs-biotracker-settings [data-font-size-option]').forEach((node) => {
     node.classList.toggle('is-active', String(node.dataset.fontSizeOption || 'standard') === fontSize);
   });
+  document.querySelectorAll('#bs-biotracker-settings [data-theme-option]').forEach((node) => {
+    node.classList.toggle('is-active', String(node.dataset.themeOption || 'retro') === String(settings.theme || 'retro'));
+  });
   const brand = document.getElementById('bs-bt-brand');
   if (brand) brand.textContent = 'Bastneth Pager';
   updateBatteryIndicator(settings);
@@ -5100,6 +5480,19 @@ function getLastPagerView() {
   return 'home';
 }
 
+function updateApiEndpointPreview() {
+  try {
+    const baseInput = document.getElementById('bs-bt-api-url');
+    const formatInput = document.getElementById('bs-bt-api-format');
+    const previewCode = document.getElementById('bs-bt-api-endpoint-preview-code');
+    if (!previewCode) return;
+    const rawBase = String(baseInput?.value || '').trim();
+    const fmt = normalizeApiFormat(formatInput?.value);
+    const base = rawBase.replace(/\/+$/, '').replace(/\/(chat\/completions|models|responses|messages|interactions)$/i, '').replace(/\/+$/, '') || '<Base URL>';
+    previewCode.textContent = getApiUrlForFormat(base, fmt);
+  } catch {}
+}
+
 function applySettingsToForm(ctx) {
   const settings = getSettings(ctx);
   syncRacePhysiologyOverrides(settings);
@@ -5112,8 +5505,10 @@ function applySettingsToForm(ctx) {
   setValue('bs-bt-enabled', settings.enabled);
   setValue('bs-bt-tracker-preset-list', settings.useStPresetForAsync ? CURRENT_PRESET_OPTION_VALUE : (settings.trackerPresetName || NO_PRESET_OPTION_VALUE));
   setValue('bs-bt-api-url', settings.apiUrl);
+  setValue('bs-bt-api-format', normalizeApiFormat(settings.apiFormat));
   setValue('bs-bt-api-key', settings.apiKey);
   setValue('bs-bt-model', settings.model);
+  updateApiEndpointPreview();
   setValue('bs-bt-formatted-output-v4', settings.formattedOutputV4 !== false);
   setValue('bs-bt-mvu-extra-analysis-compat', settings.mvuExtraAnalysisCompat !== false);
   setValue('bs-bt-race-catalog', settings.raceCatalogInPrompt !== false);
@@ -5691,6 +6086,7 @@ function readSettingsFromForm(ctx) {
     settings.trackerPresetName = normalizeTrackerPresetSelectionValue(trackerPresetSelectionValue);
   }
   settings.apiUrl = String(getValue('bs-bt-api-url')).trim();
+  settings.apiFormat = normalizeApiFormat(getValue('bs-bt-api-format'));
   settings.apiKey = String(getValue('bs-bt-api-key')).trim();
   settings.model = String(getValue('bs-bt-model')).trim();
   const formattedOutputToggle = document.getElementById('bs-bt-formatted-output-v4');
@@ -6030,6 +6426,52 @@ function toggleModal(ctx) {
   modal.classList.contains('is-open') ? closeModal() : openModal(ctx);
 }
 
+// 状态标签的毛玻璃体感气泡（TASK-15）：事件委托挂在 modal 上，
+// 标签是 innerHTML 重建的，委托一次终身有效。气泡元素挂在 body，避免被面板 overflow 裁切。
+let tagTooltipEl = null;
+
+function getTagTooltipEl() {
+  if (!tagTooltipEl) {
+    tagTooltipEl = document.createElement('div');
+    tagTooltipEl.className = 'bs-bt-tag-tooltip';
+    tagTooltipEl.setAttribute('role', 'tooltip');
+    document.body.appendChild(tagTooltipEl);
+  }
+  return tagTooltipEl;
+}
+
+function showTagTooltip(target) {
+  const text = target?.dataset?.tooltip;
+  if (!text) return;
+  const el = getTagTooltipEl();
+  el.textContent = text;
+  el.classList.add('is-visible');
+  const rect = target.getBoundingClientRect();
+  // 先摆到目标上方居中，再按视口边界收拢
+  const tipRect = el.getBoundingClientRect();
+  let left = rect.left + rect.width / 2 - tipRect.width / 2;
+  let top = rect.top - tipRect.height - 8;
+  left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+  if (top < 8) top = rect.bottom + 8; // 上方放不下就翻到下方
+  el.style.left = `${Math.round(left)}px`;
+  el.style.top = `${Math.round(top)}px`;
+}
+
+function hideTagTooltip() {
+  tagTooltipEl?.classList.remove('is-visible');
+}
+
+function initTagTooltip(modal) {
+  modal.addEventListener('mouseover', (event) => {
+    const tag = event.target.closest?.('.bs-bt-tag[data-tooltip]');
+    if (tag) showTagTooltip(tag);
+  });
+  modal.addEventListener('mouseout', (event) => {
+    if (event.target.closest?.('.bs-bt-tag[data-tooltip]')) hideTagTooltip();
+  });
+  modal.addEventListener('pointerdown', hideTagTooltip, true);
+}
+
 async function ensureModal(ctx) {
   let modal = document.getElementById(MODAL_ID);
   if (modal) return modal;
@@ -6045,6 +6487,7 @@ async function ensureModal(ctx) {
   document.querySelector('#bs-biotracker-settings .bs-bt-brand')?.classList.add('bs-bt-drag-handle');
   document.querySelector('#bs-biotracker-settings .bs-bt-screen-header')?.classList.add('bs-bt-drag-handle');
   initDraggableModal(modal);
+  initTagTooltip(modal);
 
   let sphere = document.getElementById('bs-bt-floating-sphere');
   if (!sphere) {
@@ -6231,6 +6674,12 @@ async function ensureModal(ctx) {
       renderStatusPanel(ctx);
     }),
   );
+  document.querySelectorAll('.bs-bt-lineage-open').forEach((trigger) =>
+    trigger.addEventListener('click', () => {
+      const centerName = String(trigger.dataset.lineageCenter || '').trim();
+      if (centerName) openLineageWindow(ctx, centerName);
+    }),
+  );
   document.querySelectorAll('#bs-bt-full-state-tabs [data-full-state-tab]').forEach((node) =>
     node.addEventListener('click', () => {
       const nextTab = String(node.getAttribute('data-full-state-tab') || 'variables');
@@ -6286,11 +6735,29 @@ async function ensureModal(ctx) {
   document.getElementById('bs-bt-system-button')?.addEventListener('click', () => setView('system'));
   document.getElementById('bs-bt-home-button')?.addEventListener('click', () => setView('home'));
   document.getElementById('bs-bt-track-back')?.addEventListener('click', () => setView('track-list'));
+  document.getElementById('bs-biotracker-settings')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const valueEl = target.closest('.bs-bt-need-value[data-val-urge]');
+    if (!valueEl) return;
+    event.preventDefault();
+    event.stopPropagation();
+    cycleNeedDisplayMode();
+  });
   document.getElementById('bs-bt-model-list')?.addEventListener('change', (event) => {
     const nextModel = String(event.target?.value || '').trim();
     if (!nextModel) return;
     const modelInput = document.getElementById('bs-bt-model');
     if (modelInput) modelInput.value = nextModel;
+  });
+  document.addEventListener('input', (event) => {
+    if (event.target?.id === 'bs-bt-api-url') updateApiEndpointPreview();
+  });
+  document.addEventListener('change', (event) => {
+    if (event.target?.id === 'bs-bt-api-format') {
+      updateApiEndpointPreview();
+      try { readSettingsFromForm(ctx); saveSettings(ctx); } catch {}
+    }
   });
   document.getElementById('bs-bt-tracker-preset-list')?.addEventListener('change', async () => {
     readSettingsFromForm(ctx);

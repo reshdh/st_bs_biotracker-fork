@@ -56,6 +56,7 @@ import {
 import {
   buildRecentMessages,
   cloneValue,
+  createChildId,
   derivePregnancyStageState,
   getGestationEffectiveSpeed,
   getGestationSpeciesSpeed,
@@ -534,7 +535,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsAddSperm',
-    description: '向单一角色体内加入精液，用于性交后留下受孕机会。amount 必须为正数；扣除/排出精液请用 bsDrainSperm。race 使用 [derivedType-装饰子项]race-装饰子项 格式，混血种族以 X 分隔；父系 derivedType 直接从这个字符串解析。',
+    description: '向单一角色体内加入精液，用于性交后留下受孕机会。amount 必须为正数，建议 10-30（残留每天自动衰减 10，即 1-3 天内自然消失）；给过大的值会让正文连续多日描写残留。扣除/排出精液请用 bsDrainSperm。race 使用 [derivedType-装饰子项]race-装饰子项 格式，混血种族以 X 分隔；父系 derivedType 直接从这个字符串解析。',
     input_schema: {
       type: 'object',
       properties: {
@@ -549,7 +550,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsDrainSperm',
-    description: '让角色主动排出体内部分或全部精液残留，按当前各来源比例一并减少。',
+    description: '让角色主动排出体内部分或全部精液残留，按当前各来源比例一并减少。用于角色主动清洗、灌洗或使用道具排出。注意：受精是在每次时间推进时用当下仍存在的精液判定，清空后这次性交不再有受孕机会——若剧情只是洗澡沐浴、角色并不打算避孕，不要调用本工具，残留本来就会自行衰减。',
     input_schema: {
       type: 'object',
       properties: {
@@ -2414,7 +2415,7 @@ function getMilkDevelopment(profile) {
 // 不给容量随发育长，「满了几成」就退化成「绝对值除以 150」，早期永远读不到高档，
 // 于是「任何阶段都能胀到发烫」这一整套落不了地。
 // 容量不乘体质系数——多奶是产得多不是容器大。
-function getMilkCapacity(profile) {
+export function getMilkCapacity(profile) {
   return getMilkCapacityFromDays(
     profile?.bio?.milkGate,
     profile?.bio?.milkConstitution,
@@ -2425,7 +2426,7 @@ function getMilkCapacity(profile) {
 
 // getMetabolismCap 对尿意返回的是「收不住」那条硬线，也就是值的天花板。
 // 想去与收不住之间那段是憋耐余量，只有 getUrineUrgeThreshold 能读到。
-function getMetabolismCap(profile, key, currentFlux = 0) {
+export function getMetabolismCap(profile, key, currentFlux = 0) {
   const baseCap = key === 'urine'
     ? getUrineHardCap(String(profile?.base?.stage || ''), getEngagedFetusCount(profile), getEngagementProgress(profile), isProlongedPregnancy(profile))
       + getUrineMultipleAdjust(Math.max(1, clampNumber(profile?.pregnant?.fetusesCount, 0, 99, 1))).urge   // 上限跟着满档收（urge 修正为负值）
@@ -2868,7 +2869,7 @@ function getMilkBlockStage(profile) {
   return stage;
 }
 
-function isMilkBlocked(profile) {
+export function isMilkBlocked(profile) {
   return getMilkBlockStage(profile) >= MILK_BLOCK_STAGES.length;
 }
 
@@ -4519,9 +4520,12 @@ function appendChildrenFromFetuses(profile, fetuses) {
       gender: String(fetus?.gender || '未知'),
       race: String(fetus?.race || '未知'),
       derivedType: childDerivedType,
+      fatherRace: fetus?.fatherRace ? String(fetus.fatherRace) : null,
+      fatherDerivedType: fetus?.fatherDerivedType ? String(fetus.fatherDerivedType) : null,
       age: 0,
       birthWeightRatio: clampNumber(fetus?.weight, 0.33, 3.0, 1.0),
       birthAffinity: clampNumber(fetus?.affinity, -50, 50, 0),
+      id: createChildId(),
       talents: normalizeTalentList(fetus?.talents ?? fetus?.inheritedTalents),
     });
   }

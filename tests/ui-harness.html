@@ -6,14 +6,47 @@
 <title>BioTracker UI Harness</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  body { margin: 0; min-height: 100vh; background: #2b2b33; font-family: sans-serif; color: #ddd; }
-  #harness-info { padding: 12px 16px; font-size: 13px; line-height: 1.6; opacity: .8; }
+  body { margin: 0; min-height: 100vh; background: #13151b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0; overflow-x: hidden; }
+  #st-mock-topbar { height: 42px; background: #1a1d26; border-bottom: 1px solid #2d3242; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 13px; color: #94a3b8; }
+  #st-mock-topbar b { color: #f1f5f9; }
+  #st-mock-chat { max-width: 800px; margin: 30px auto; padding: 0 20px; display: flex; flex-direction: column; gap: 16px; opacity: 0.65; }
+  .st-mock-msg { display: flex; flex-direction: column; gap: 4px; max-width: 85%; }
+  .st-mock-msg--user { align-self: flex-end; align-items: flex-end; }
+  .st-mock-msg--ai { align-self: flex-start; align-items: flex-start; }
+  .st-mock-bubble { padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; }
+  .st-mock-msg--user .st-mock-bubble { background: #3b82f6; color: #fff; }
+  .st-mock-msg--ai .st-mock-bubble { background: #262a36; border: 1px solid #33394a; color: #cbd5e1; }
+  .st-mock-name { font-size: 12px; color: #64748b; margin-bottom: 2px; }
+  #harness-quick-bar { position: fixed; top: 50px; left: 20px; z-index: 99999; background: rgba(26, 29, 38, 0.95); border: 1px solid #475569; border-radius: 8px; padding: 8px 12px; display: flex; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); backdrop-filter: blur(8px); }
+  #harness-quick-bar button { background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  #harness-quick-bar button:hover { background: #475569; border-color: #94a3b8; }
+  #harness-quick-bar button.is-active { background: #ec4899; border-color: #f472b6; font-weight: bold; }
 </style>
 </head>
 <body>
-<div id="harness-info">
-  <b>BioTracker UI Harness</b>（mock 宿主，非真实 SillyTavern）<br>
-  点击右下角悬浮球打开手机面板。种子角色：艾拉（卵泡期，wearState 敞开，内衣配件）、贝拉（产后恢复，pregFit 生效）。
+<div id="st-mock-topbar">
+  <div><b>SillyTavern</b> <span style="opacity:0.6;margin-left:8px;">扩展：BS BioTracker 生理追踪器已加载</span></div>
+  <div style="font-size:12px;color:#94a3b8;">当前角色：<span id="st-current-char" style="color:#f472b6;font-weight:bold;">艾拉</span> · 纯正酒馆宿主环境模拟</div>
+</div>
+
+<div id="harness-quick-bar">
+  <button type="button" id="btn-show-aila" class="is-active">艾拉 (常态/平静态)</button>
+  <button type="button" id="btn-show-qila">琪拉 (孕晚期/溢出憋耐态)</button>
+  <button type="button" id="btn-show-beila">贝拉 (产后/极限心跳♥)</button>
+  <span style="border-right:1px solid #475569;margin:0 4px;"></span>
+  <button type="button" id="btn-tab-overview">切到【概览】</button>
+  <button type="button" id="btn-tab-description">切到【描述】(看胸腹私处)</button>
+</div>
+
+<div id="st-mock-chat">
+  <div class="st-mock-msg st-mock-msg--user">
+    <div class="st-mock-name">用户</div>
+    <div class="st-mock-bubble">艾拉，最近身体感觉怎么样？身体有没有哪里不舒服？</div>
+  </div>
+  <div class="st-mock-msg st-mock-msg--ai">
+    <div class="st-mock-name">艾拉</div>
+    <div class="st-mock-bubble"><i>*艾拉微微垂眸，双手自然交叠在柔软平坦的腹前，脸上泛起浅浅的笑意，从容中带着一丝微不可察的娇羞。*</i><br><br>“承蒙挂念，我的身体一切都好呢……稍微坐久了有一点点想去洗手间，不过完全不影响，你不用担心我。”</div>
+  </div>
 </div>
 <script type="module">
   const CHAT_KEY = 'ui-harness-chat';
@@ -31,9 +64,9 @@
         ...overrides.base,
       },
       bio: {},
-      metabolism: { excretion: 20, hunger: 30, sleep: 10, milk: 5, odor: 10, companionship: 15, ...overrides.metabolism },
+      metabolism: { urine: 25, stool: 8, excretion: 20, hunger: 30, sleep: 10, milk: 5, odor: 10, companionship: 15, ...overrides.metabolism },
       descriptions: {
-        normalDescription: '外貌|黑发碧眼，身形修长;;神态|从容微笑;;',
+        normalDescription: '外貌|黑发碧眼，身形修长柔软;;神态|从容微笑，眼神温润;;胸部|C罩杯饱满挺拔，乳晕淡粉，行动时有轻柔微颤;;腹部|平坦温软，小腹平滑无赘肉;;私处|紧致微润，色泽粉嫩;;后庭|紧闭安宁;;',
         pregnantDescription: '',
         ...overrides.descriptions,
       },
@@ -93,8 +126,12 @@
       }),
       琪拉: makeCharacter('琪拉', {
         base: { stage: '孕晚期', days: 152, age: 26, eggs: 0 },
-        descriptions: { pregnantDescription: '孕态|腹部高耸，行动迟缓;;' },
+        descriptions: {
+          normalDescription: '外貌|金发碧眼，身段丰腴;;胸部|D罩杯沉重涨大，乳头敏感微硬;;腹部|高耸隆起，沉重下垂;;',
+          pregnantDescription: '供养|胎盘附着于后壁，血运充盈良好;;羊水|清亮充盈，量适中;;胸部|双乳充血肿胀沉重，触碰微疼，偶有初乳渗漏;;腹部|腹壁明显紧绷发亮，子宫高居上腹，胎动频繁有力;;胎况|双胎头位，已接近入盆;;',
+        },
         profile: {
+          metabolism: { urine: 65, stool: 32, hunger: 75, sleep: 80, milk: 40 },
           pregnant: {
             pregnantDays: 152,
             effectivePregnantDays: 152,
@@ -110,6 +147,7 @@
       贝拉: makeCharacter('贝拉', {
         base: { stage: '产后恢复', days: 10, age: 27 },
         profile: {
+          metabolism: { urine: 95, stool: 55, hunger: 130, sleep: 125, milk: 125 },
           wardrobe: {
             enabled: true,
             items: [
@@ -138,7 +176,7 @@
     extensionSettings: {
       bs_biotracker: {
         enabled: true,
-        theme: 'retro',
+        theme: 'peach',
         deviceSize: 'phone',
         fontSize: 'standard',
         triggerTiming: 'after_ai',
@@ -192,10 +230,62 @@
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: cx, clientY: cy, bubbles: true, pointerId: 1 }));
     setTimeout(() => {
       const opened = document.getElementById('bs-biotracker-modal');
-      if ((!opened || getComputedStyle(opened).display === 'none') && retries > 0) autoOpen(retries - 1);
+      if ((!opened || getComputedStyle(opened).display === 'none') && retries > 0) {
+        autoOpen(retries - 1);
+      } else {
+        // 自动导航进入“追踪”->点击“艾拉”，展示真实酒馆中打开角色仪表盘的样子
+        const trackTile = document.querySelector('.bs-bt-home-tile[data-nav-view="track-list"]');
+        if (trackTile) trackTile.click();
+        setTimeout(() => {
+          const charButtons = document.querySelectorAll('.bs-bt-track-character-button');
+          if (charButtons.length > 0) charButtons[0].click();
+        }, 150);
+      }
     }, 500);
   };
   setTimeout(() => autoOpen(), 600);
+
+  // 顶部快捷栏切角与切标签逻辑
+  function selectCharacterByName(targetName) {
+    document.getElementById('st-current-char').textContent = targetName;
+    const backBtn = document.getElementById('bs-bt-track-back');
+    if (backBtn && document.querySelector('#bs-bt-view-track-char.is-active')) {
+      backBtn.click();
+    }
+    setTimeout(() => {
+      const buttons = document.querySelectorAll('.bs-bt-track-character-button');
+      for (const btn of buttons) {
+        if (btn.textContent.includes(targetName)) {
+          btn.click();
+          break;
+        }
+      }
+    }, 120);
+  }
+
+  document.getElementById('btn-show-aila')?.addEventListener('click', (e) => {
+    document.querySelectorAll('#harness-quick-bar button').forEach(b => b.classList.remove('is-active'));
+    e.target.classList.add('is-active');
+    selectCharacterByName('艾拉');
+  });
+  document.getElementById('btn-show-qila')?.addEventListener('click', (e) => {
+    document.querySelectorAll('#harness-quick-bar button').forEach(b => b.classList.remove('is-active'));
+    e.target.classList.add('is-active');
+    selectCharacterByName('琪拉');
+  });
+  document.getElementById('btn-show-beila')?.addEventListener('click', (e) => {
+    document.querySelectorAll('#harness-quick-bar button').forEach(b => b.classList.remove('is-active'));
+    e.target.classList.add('is-active');
+    selectCharacterByName('贝拉');
+  });
+  document.getElementById('btn-tab-overview')?.addEventListener('click', () => {
+    const tab = document.querySelector('#bs-bt-track-tabs .bs-bt-track-tab[data-track-tab="overview"]');
+    if (tab) tab.click();
+  });
+  document.getElementById('btn-tab-description')?.addEventListener('click', () => {
+    const tab = document.querySelector('#bs-bt-track-tabs .bs-bt-track-tab[data-track-tab="description"]');
+    if (tab) tab.click();
+  });
 </script>
 </body>
 </html>

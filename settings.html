@@ -131,6 +131,7 @@
               <button type="button" class="bs-bt-theme-option" data-theme-option="eldritch">10. 克系 (Eldritch)</button>
               <button type="button" class="bs-bt-theme-option" data-theme-option="ink">11. 水墨 (Ink)</button>
               <button type="button" class="bs-bt-theme-option" data-theme-option="constructivism">12. 建构 (Construct)</button>
+              <button type="button" class="bs-bt-theme-option" data-theme-option="peach">13. 白桃水光 (Peach)</button>
             </div>
           </div>
         </section>
@@ -145,6 +146,17 @@
             <div class="settings_section">
               <label for="bs-bt-api-url">OpenAI 兼容 API Base URL</label>
               <input id="bs-bt-api-url" class="text_pole" type="text" placeholder="https://api.example.com/v1" />
+              <small id="bs-bt-api-endpoint-preview" class="bs-bt-inline-status" style="display:block;margin-top:4px;opacity:0.85;">端点预览：<code id="bs-bt-api-endpoint-preview-code">—</code></small>
+            </div>
+
+            <div class="settings_section">
+              <label for="bs-bt-api-format">API 格式</label>
+              <select id="bs-bt-api-format" class="text_pole">
+                <option value="openai_compat">通用（兼容 OpenAI） /chat/completions</option>
+                <option value="openai_responses">自定义（兼容 OpenAI Responses） /responses</option>
+                <option value="claude_messages">自定义（兼容 Claude Messages） /messages</option>
+                <option value="gemini_interactions">自定义（兼容 Gemini Interactions） /interactions</option>
+              </select>
             </div>
 
             <div class="settings_section">

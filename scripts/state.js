@@ -69,6 +69,7 @@ export const THEME_CONFIG = {
   eldritch: {},
   ink: {},
   constructivism: {},
+  peach: {},
 };
 
 export const DEFAULT_WARDROBE_PREP_PROMPT = [
@@ -120,6 +121,40 @@ export const DEFAULT_SYSTEM_PROMPT = [
   '不要编造怀孕天数、胎数、流产、分娩或其他高影响事件。',
 ].join('\n');
 
+export const API_FORMATS = Object.freeze({
+  OPENAI_COMPAT: 'openai_compat',
+  CLAUDE_MESSAGES: 'claude_messages',
+  OPENAI_RESPONSES: 'openai_responses',
+  GEMINI_INTERACTIONS: 'gemini_interactions',
+});
+
+export function normalizeApiFormat(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === API_FORMATS.OPENAI_RESPONSES || raw === 'responses' || raw === 'openai_responses' || raw === 'custom_openai_responses') return API_FORMATS.OPENAI_RESPONSES;
+  if (raw === API_FORMATS.CLAUDE_MESSAGES || raw === 'claude' || raw === 'messages' || raw === 'claude_messages' || raw === 'custom_claude_messages' || raw === 'anthropic') return API_FORMATS.CLAUDE_MESSAGES;
+  if (raw === API_FORMATS.GEMINI_INTERACTIONS || raw === 'gemini' || raw === 'interactions' || raw === 'gemini_interactions') return API_FORMATS.GEMINI_INTERACTIONS;
+  return API_FORMATS.OPENAI_COMPAT;
+}
+
+export function getApiEndpointSuffix(format) {
+  switch (normalizeApiFormat(format)) {
+    case API_FORMATS.OPENAI_RESPONSES: return '/responses';
+    case API_FORMATS.CLAUDE_MESSAGES: return '/messages';
+    case API_FORMATS.GEMINI_INTERACTIONS: return '/interactions';
+    case API_FORMATS.OPENAI_COMPAT:
+    default: return '/chat/completions';
+  }
+}
+
+export function getApiUrlForFormat(apiBase, format) {
+  const base = String(apiBase || '').trim().replace(/\/+$/, '');
+  const fmt = normalizeApiFormat(format);
+  if (fmt === API_FORMATS.GEMINI_INTERACTIONS && !/\/(v1|v1beta)$/i.test(base)) {
+    return `${base}/v1beta/interactions`;
+  }
+  return `${base}${getApiEndpointSuffix(fmt)}`;
+}
+
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'retro',
   deviceSize: 'phone',
@@ -130,6 +165,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   trackerPromptToggles: {},
   trackerPromptToggleOverrides: {},
   apiUrl: '',
+  apiFormat: API_FORMATS.OPENAI_COMPAT,
   apiKey: '',
   model: 'gpt-4.1-mini',
   modelOptions: [],
@@ -678,7 +714,7 @@ function sanitizeFetusList(value) {
     .filter((item) => item && typeof item === 'object')
     .map((item) => {
       const fetus = {};
-      const stringFields = ['fathers', 'provider', 'race', 'fatherRace', 'gender', 'embryoType', 'fatherDerivedType'];
+      const stringFields = ['fathers', 'provider', 'race', 'fatherRace', 'gender', 'embryoType', 'fatherDerivedType', 'id'];
       for (const field of stringFields) {
         const next = sanitizeString(item[field]);
         if (next !== undefined) fetus[field] = next;
@@ -757,12 +793,19 @@ function sanitizeChildrenList(value) {
       gender: sanitizeString(item.gender) ?? null,
       race: sanitizeString(item.race) ?? null,
       derivedType: sanitizeString(item.derivedType) ?? null,
+      fatherRace: sanitizeString(item.fatherRace) ?? null,
+      fatherDerivedType: sanitizeString(item.fatherDerivedType) ?? null,
       age: sanitizeNumber(item.age, { min: 0, max: 9999 }) ?? null,
       birthWeightRatio: sanitizeNumber(item.birthWeightRatio, { min: 0.33, max: 3.0 }) ?? null,
       birthAffinity: sanitizeNumber(item.birthAffinity, { min: -50, max: 50 }) ?? null,
+      id: sanitizeString(item.id) ?? createChildId(),
       registeredAs: sanitizeString(item.registeredAs) ?? null,
       talents: normalizeTalentList(item.talents ?? item.inheritedTalents),
     }));
+}
+
+export function createChildId() {
+  return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function sanitizeProfilePatch(profilePatch) {
@@ -1334,6 +1377,17 @@ export function getChatState(ctx, settings) {
     }
     chatState.characters = migrated;
     shouldSave = true;
+  }
+  // 存量迁移：早期的孩子记录没有 id，补上后血缘引用才不依赖阵列索引
+  for (const character of Object.values(chatState.characters)) {
+    const children = character?.profile?.children;
+    if (!Array.isArray(children)) continue;
+    for (const child of children) {
+      if (child && typeof child === 'object' && !child.id) {
+        child.id = createChildId();
+        shouldSave = true;
+      }
+    }
   }
   const normalizedSkillCatalog = normalizeSkillCatalog(chatState.skillCatalog);
   if (JSON.stringify(chatState.skillCatalog || []) !== JSON.stringify(normalizedSkillCatalog)) shouldSave = true;
@@ -2518,3 +2572,6 @@ export function formatStatusText(chatState) {
   }
   return lines.join('\n').trim();
 }
+
+export { getCharacterStatusTags } from './status_tag_matrix.js';
+
