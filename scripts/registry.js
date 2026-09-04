@@ -486,14 +486,34 @@ async function runBreedingInference(settings, payload, options = {}) {
   recordBreedingInferenceRequestDebug(systemPrompt, payload);
   try {
     const rawResult = await callOpenAICompatible(settings, payload, systemPrompt);
-    const result = normalizeBreedingInferenceResult(rawResult);
+    let result = normalizeBreedingInferenceResult(rawResult);
     // 角色卡、最近对话中会同时出现 user 与其他人物；target_character 是 UI 的
     // 明确输入，不能把模型回传的猜测当成目标来源，否则结果会显示成 user。
     if (result && typeof result === 'object' && !Array.isArray(result)) {
       result.target_character = String(payload?.target_character || '').trim();
     }
-    const stageProfiles = normalizePsychologyStageProfiles(result?.stageProfiles);
-    const missing = getMissingPsychologyStageProfileKeys(stageProfiles);
+    let stageProfiles = normalizePsychologyStageProfiles(result?.stageProfiles);
+    let missing = getMissingPsychologyStageProfileKeys(stageProfiles);
+    // 模型（尤其 flash 档）经常直接省略 36 段的 stageProfiles。
+    // 缺失时带上具体缺口再问一次，比直接把错误甩给用户成功率高得多。
+    if (missing.length > 0) {
+      console.warn(`[BS BioTracker] 繁育推演首次返回缺少 stageProfiles（缺 ${missing.length} 项），自动补问一次`);
+      const retryResult = normalizeBreedingInferenceResult(await callOpenAICompatible(
+        settings,
+        payload,
+        `${systemPrompt}\n\n【补正要求】你上一次的返回缺少或未完整填写 stageProfiles 字段。stageProfiles 是必填字段，缺少它整次推演作废。\n缺失的键：${missing.slice(0, 24).join(', ')}${missing.length > 24 ? ' 等' : ''}。\n请重新输出完整 JSON：mens 与 preg 两组各 3 轴（mastery/desire/autonomy 与 cognition/bonding/stance），每轴 6 个阶段键（0、1_25、26_50、51_75、76_100、100_plus）全部要有非空的角色专属文字，不得使用默认标签，不得省略任何键。`,
+      ));
+      if (retryResult && typeof retryResult === 'object' && !Array.isArray(retryResult)) {
+        retryResult.target_character = String(payload?.target_character || '').trim();
+        // 补问返回只信任 stageProfiles 部分；其余字段以首次为准（首次已通过基础校验）
+        const retryProfiles = normalizePsychologyStageProfiles(retryResult.stageProfiles);
+        if (getMissingPsychologyStageProfileKeys(retryProfiles).length === 0) {
+          result = { ...result, ...retryResult, stageProfiles: retryProfiles };
+          stageProfiles = retryProfiles;
+          missing = [];
+        }
+      }
+    }
     if (missing.length > 0) {
       throw new Error(`繁育推演缺少 6x6 stageProfiles：${missing.slice(0, 12).join(', ')}${missing.length > 12 ? '...' : ''}`);
     }
