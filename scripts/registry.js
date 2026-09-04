@@ -1763,18 +1763,25 @@ export async function runRegistry(ctx, options = {}) {
     const recentMessagesText = JSON.stringify(payload.recent_messages) || '';
     const breedingInferenceText = JSON.stringify(payload.breeding_inference) || '';
     const payloadText = JSON.stringify(payload) || '';
+    const globalWorldbooksText = JSON.stringify(payload.global_worldbooks) || '';
     const worldbookEntries = Array.isArray(payload.character_worldbook?.entries)
       ? payload.character_worldbook.entries.length
       : (Array.isArray(payload.character_worldbook?.worldBook?.entries) ? payload.character_worldbook.worldBook.entries.length : 0);
+    const globalWorldbookCount = Array.isArray(payload.global_worldbooks) ? payload.global_worldbooks.length : 0;
     console.log('[BS BioTracker][registry] payload size', {
       target_character: targetName,
       current_character_chars: currentCharacterText.length,
       character_worldbook_chars: characterWorldBookText.length,
       character_worldbook_entries: worldbookEntries,
+      global_worldbooks_chars: globalWorldbooksText.length,
+      global_worldbooks_count: globalWorldbookCount,
       recent_messages_chars: recentMessagesText.length,
       breeding_inference_chars: breedingInferenceText.length,
       payload_chars: payloadText.length,
     });
+    if (worldbookEntries === 0) {
+      console.warn('[BS BioTracker][registry] 角色世界书为空——模型将无法读取世界书设定。检查角色卡是否绑定了世界书，以及世界书过滤模式是否过严。');
+    }
   } catch (error) {
     console.warn('[BS BioTracker][registry] payload size debug failed', error);
   }

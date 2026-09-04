@@ -1380,11 +1380,14 @@ export async function callOpenAICompatible(settings, payload, systemPrompt = DEF
       ...effectiveMessages.slice(1),
     ];
   }
+  const isRegistry = Boolean(safePayload?.target_character);
   const body = {
     model,
     temperature: 0.2,
     ...stPresetSampling,
     messages: effectiveMessages,
+    // 注册请求返回的 JSON 含 6×6 stageProfiles 等大量文字，4096 不够会被截断
+    ...(isRegistry ? { max_tokens: 8192 } : {}),
     ...(useFormattedOutputV4 ? { response_format: { type: 'json_object' } } : {}),
   };
   recordEffectiveRequestDebug(
