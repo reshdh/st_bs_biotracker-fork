@@ -4553,6 +4553,7 @@
 #bs-biotracker-settings .bs-bt-need-tile--high .bs-bt-need-value {
   color: var(--bs-bt-need-urgent-text);
   color: var(--bs-bt-need-fill-color, var(--bs-bt-need-color));
+}
 #bs-biotracker-settings .bs-bt-need-value[data-val-urge] {
   cursor: pointer;
   user-select: none;

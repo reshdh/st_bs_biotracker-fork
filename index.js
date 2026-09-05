@@ -3542,11 +3542,16 @@ function renderSpermShareChart(sperms) {
 function renderTrackPregnancy(viewModel) {
   const data = viewModel.pregnancy;
   const gestationModifier = data.gestationModifier || {};
+  // 受孕风险徽章必须看月经阶段：之前只看卵子/受精/胎儿，
+  // 排卵期（易孕窗口）体内尚无卵子记录时会被误标成「安全期」。
+  const stageForBadge = String(viewModel.overview?.stage || '');
   const fertilityBadge = data.showPregnantFields
     ? '已怀孕'
     : (Number(data.eggs) > 0 || Number(data.fertilizationDays) > 0 || (Array.isArray(data.fetuses) && data.fetuses.length > 0))
       ? '危险期'
-      : '安全期';
+      : stageForBadge === '排卵期'
+        ? '易孕期'
+        : '安全期';
   const pregnantDaysBadge = data.showPregnantFields
     ? `孕龄 ${formatOneBasedDay(data.pregnantDays)}d`
     : '';
