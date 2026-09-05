@@ -1045,6 +1045,29 @@
   transform: scale(0.97);
 }
 
+/* 白桃主题：按键做成圆润甲片感——更圆、顶部高光、按下时下沉 */
+#bs-biotracker-settings.theme-peach .bs-bt-home-tile {
+  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.75), rgba(248, 200, 216, 0.45));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 2px 6px rgba(212, 160, 176, 0.25);
+}
+
+#bs-biotracker-settings.theme-peach .bs-bt-home-tile:hover {
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 3px 10px rgba(212, 160, 176, 0.35);
+}
+
+#bs-biotracker-settings.theme-peach .bs-bt-home-tile:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow:
+    inset 0 1px 3px rgba(200, 140, 165, 0.3),
+    0 1px 2px rgba(212, 160, 176, 0.2);
+}
+
 #bs-biotracker-settings .bs-bt-home-tile--empty,
 #bs-biotracker-settings .bs-bt-home-tile--empty:hover,
 #bs-biotracker-settings .bs-bt-home-tile--empty:focus-visible,
@@ -2084,6 +2107,7 @@
 }
 
 #bs-biotracker-settings .bs-bt-track-progress-bar {
+  position: relative;
   height: 8px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.16);
@@ -2093,8 +2117,59 @@
 #bs-biotracker-settings .bs-bt-track-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: currentColor;
+  background: var(--bsbt-prog-color, currentColor);
   opacity: 0.78;
+}
+
+/* ── 四维进度条状态色阶（消耗型 vs 累积型）──
+   消耗型（体力）：越空越危险。累积型（性欲/情压/宫压）：越满越紧张。
+   文字层（数字/标签）永不变色，只有条的颜色随档位走。 */
+
+/* 通用回退：color-mix 混入主题文字色，12 套主题自适应 */
+.bs-bt-track-progress--体力.bs-bt-track-progress--tier-low    { --bsbt-prog-color: color-mix(in srgb, #e85d7a 70%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--体力.bs-bt-track-progress--tier-mid    { --bsbt-prog-color: color-mix(in srgb, #e8a35d 70%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--体力.bs-bt-track-progress--tier-high   { --bsbt-prog-color: color-mix(in srgb, #7bc8a4 70%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--体力.bs-bt-track-progress--tier-peak   { --bsbt-prog-color: color-mix(in srgb, #4ec9a0 75%, var(--bsbt-lcd-text)); }
+
+.bs-bt-track-progress--性欲.bs-bt-track-progress--tier-low    { --bsbt-prog-color: color-mix(in srgb, #c9b8c4 60%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--性欲.bs-bt-track-progress--tier-mid    { --bsbt-prog-color: color-mix(in srgb, #f0a0b8 70%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--性欲.bs-bt-track-progress--tier-high   { --bsbt-prog-color: color-mix(in srgb, #f78fb0 75%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--性欲.bs-bt-track-progress--tier-peak   { --bsbt-prog-color: color-mix(in srgb, #e85d7a 80%, var(--bsbt-lcd-text)); }
+
+.bs-bt-track-progress--情压.bs-bt-track-progress--tier-low    { --bsbt-prog-color: color-mix(in srgb, #7bc8a4 65%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--情压.bs-bt-track-progress--tier-mid    { --bsbt-prog-color: color-mix(in srgb, #e8c35d 70%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--情压.bs-bt-track-progress--tier-high   { --bsbt-prog-color: color-mix(in srgb, #e89a5d 75%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--情压.bs-bt-track-progress--tier-peak   { --bsbt-prog-color: color-mix(in srgb, #d64560 80%, var(--bsbt-lcd-text)); }
+
+.bs-bt-track-progress--宫压.bs-bt-track-progress--tier-low    { --bsbt-prog-color: color-mix(in srgb, #c9b8c4 60%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--宫压.bs-bt-track-progress--tier-mid    { --bsbt-prog-color: color-mix(in srgb, #d4a0e8 70%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--宫压.bs-bt-track-progress--tier-high   { --bsbt-prog-color: color-mix(in srgb, #c77ddb 75%, var(--bsbt-lcd-text)); }
+.bs-bt-track-progress--宫压.bs-bt-track-progress--tier-peak   { --bsbt-prog-color: color-mix(in srgb, #b84dc9 80%, var(--bsbt-lcd-text)); }
+
+/* 峰值呼吸：90%+ 时条微微亮度呼吸（3s 缓周期，饱满感而非报警） */
+.bs-bt-track-progress--tier-peak .bs-bt-track-progress-fill {
+  animation: bs-bt-prog-peak-breathe 3s ease-in-out infinite;
+}
+
+@keyframes bs-bt-prog-peak-breathe {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-bt-track-progress--tier-peak .bs-bt-track-progress-fill {
+    animation: none;
+  }
+}
+
+/* 体力软顶刻度：淡金色，让「能恢复到哪」这条线本身可读 */
+#bs-biotracker-settings .bs-bt-track-progress-softmark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in srgb, #e8c35d 75%, var(--bsbt-lcd-text));
+  border-radius: 1px;
 }
 
 #bs-biotracker-settings .bs-bt-track-tag-list {
@@ -3493,6 +3568,33 @@
   opacity: 1;
 }
 
+/* 白桃待机：不是关机，是「她睡着了」——极淡粉底 + 缓慢呼吸的爱心 */
+#bs-biotracker-settings.theme-peach .bs-bt-power-off-overlay {
+  background: linear-gradient(160deg, #fae8ef 0%, #f5d8e2 100%);
+  color: #d4a0b0;
+  text-shadow: none;
+}
+
+#bs-biotracker-settings.theme-peach .bs-bt-power-off-overlay::after {
+  content: '♡';
+  position: absolute;
+  font-size: 2.2rem;
+  color: rgba(212, 140, 165, 0.35);
+  animation: bs-bt-peach-sleep-breathe 4s ease-in-out infinite;
+}
+
+@keyframes bs-bt-peach-sleep-breathe {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bs-biotracker-settings.theme-peach .bs-bt-power-off-overlay::after {
+    animation: none;
+    opacity: 0.25;
+  }
+}
+
 @media (max-width: 520px) {
   .bs-bt-modal__dialog {
     width: calc(100vw - 16px);
@@ -4457,19 +4559,29 @@
   display: none;
 }
 
+/* 粉饼盒形态：上下不对称边框（上厚下薄，像翻盖镜），大圆角 */
 #bs-biotracker-settings.theme-peach .bs-bt-screen {
-  border-width: 8px;
+  border-width: 20px 8px 6px 8px;
+  border-radius: 18px;
   box-shadow: inset 0 0 12px rgba(200, 100, 140, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  /* 水光微环境：两团极淡的粉斑，像透过水面看到的光 */
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 30%, rgba(255, 214, 224, 0.25), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 80% 70%, rgba(255, 200, 215, 0.2), transparent 70%),
+    var(--bsbt-lcd-bg);
 }
 
-/* 屏幕顶部湿润高光（仅标题栏区域，不压数据区文字） */
+/* 外壳铰链凹槽：屏幕上方一道细线，暗示翻盖 */
 #bs-biotracker-settings.theme-peach .bs-bt-screen::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, transparent 15%);
+  top: -14px;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200, 140, 160, 0.5), transparent);
   pointer-events: none;
-  z-index: 0;
+  z-index: 2;
 }
 
 #bs-biotracker-settings.theme-peach .bs-bt-screen > * {
@@ -4776,6 +4888,33 @@
   color: color-mix(in srgb, var(--bsbt-lcd-text) 70%, transparent);
   border: 1px dashed color-mix(in srgb, var(--bsbt-lcd-text) 30%, transparent);
   cursor: help;
+}
+
+/* 状态小表情：状态栏最右端，一眼读出「她现在整体怎么样」（白桃主题专属） */
+.bs-bt-tag-mood {
+  margin-left: auto;
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+}
+
+.bs-bt-tag-mood--calm {
+  color: color-mix(in srgb, #d4a0b0 60%, var(--bsbt-lcd-text));
+}
+
+.bs-bt-tag-mood--active {
+  color: color-mix(in srgb, #f78fb0 80%, var(--bsbt-lcd-text));
+}
+
+.bs-bt-tag-mood--urgent {
+  animation: bs-bt-need-critical-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-bt-tag-mood--urgent {
+    animation: none;
+  }
 }
 
 /* 毛玻璃体感气泡（TASK-15）：挂在 body 上，fixed 定位，不被面板裁切。

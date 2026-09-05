@@ -3349,7 +3349,11 @@ function renderProgressList(items) {
       const softMarkHtml = Number.isFinite(softCap) && softCap >= 0 && softCap <= cap && !unbounded
         ? `<div class="bs-bt-track-progress-softmark" style="left:${Math.min(100, (softCap / cap) * 100)}%;"></div>`
         : '';
-      return `<div class="bs-bt-track-progress">
+      // 状态色阶档位：按 value/cap 比例分四档，颜色语义按条的性质分消耗型/累积型（见 style.css）
+      const ratio = unbounded ? 0 : Math.max(0, Math.min(1, value / cap));
+      const tier = ratio >= 0.9 ? 'peak' : ratio >= 0.7 ? 'high' : ratio >= 0.3 ? 'mid' : 'low';
+      const labelKey = String(item.label || '');
+      return `<div class="bs-bt-track-progress bs-bt-track-progress--${escapeHtml(labelKey)} bs-bt-track-progress--tier-${tier}">
         <div class="bs-bt-track-progress-head"><span>${escapeHtml(item.label)}${badgeHtml}</span><span>${displayValue}</span></div>
         <div class="bs-bt-track-progress-bar" style="width:${scale};"><div class="bs-bt-track-progress-fill" style="width:${fill};"></div>${softMarkHtml}</div>
       </div>`;
@@ -3413,10 +3417,15 @@ function renderTrackOverview(viewModel) {
   const statusTags = Array.isArray(viewModel.statusTags) ? viewModel.statusTags : [];
   const visibleTags = statusTags.slice(0, 5);
   const hiddenTags = statusTags.slice(5);
+  // 白桃主题专属：状态小表情——把一堆标签浓缩成「她现在整体怎么样」的一眼判断
+  const hasUrgentTag = statusTags.some((t) => String(t?.className || '').includes('bs-bt-tag--urgent'));
+  const moodGlyph = hasUrgentTag ? '💦' : statusTags.length > 1 ? '♥' : '♡';
+  const moodClass = hasUrgentTag ? 'bs-bt-tag-mood--urgent' : statusTags.length > 1 ? 'bs-bt-tag-mood--active' : 'bs-bt-tag-mood--calm';
   const statusBarHtml = statusTags.length > 0
     ? `<div class="bs-bt-status-bar">
         ${visibleTags.map((tag) => `<span class="bs-bt-tag ${escapeHtml(tag?.className || '')}" data-tooltip="${escapeHtml(tag?.tooltip || tag?.label || '')}">${escapeHtml(tag?.label || '')}</span>`).join('')}
         ${hiddenTags.length > 0 ? `<span class="bs-bt-tag bs-bt-tag--more" data-tooltip="${escapeHtml(hiddenTags.map((t) => `${t?.label || ''}：${t?.tooltip || ''}`).join('\n'))}">+${hiddenTags.length}</span>` : ''}
+        <span class="bs-bt-tag-mood ${moodClass}" aria-hidden="true">${moodGlyph}</span>
       </div>`
     : '';
   const progress = viewModel.overview.stageProgress;
