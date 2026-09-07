@@ -228,13 +228,13 @@ test('the retry counter counts total tries so 3/3 can no longer hide a 4th attem
   const warnings = [];
   const previousToastr = globalThis.toastr;
   globalThis.toastr = { warning: (message) => warnings.push(String(message)) };
-  const badContent = { choices: [{ message: { content: '这不是 JSON' } }] };
+  const temporaryError = { error: 'temporarily unavailable' };
   const goodContent = { choices: [{ message: { content: JSON.stringify({ operations: [] }) } }] };
   let call = 0;
   installBrowserHost(async () => {
     call += 1;
-    // 第 1 轮的 primary + JSON 纠错子请求都坏 → 触发一次重试；第 2 轮 primary 就好
-    return jsonResponse(call <= 2 ? badContent : goodContent);
+    // 临时服务错误可重试；永久格式错误改由一次 JSON 纠错额度负责。
+    return call === 1 ? jsonResponse(temporaryError, 503) : jsonResponse(goodContent);
   });
 
   try {
@@ -256,14 +256,13 @@ test('the retry counter counts total tries so 3/3 can no longer hide a 4th attem
 });
 
 test('the overall deadline terminates a run that keeps failing, without hanging forever', async () => {
-  const badContent = { choices: [{ message: { content: '仍然不是 JSON' } }] };
   let calls = 0;
   installBrowserHost(async () => {
     calls += 1;
-    return jsonResponse(badContent);
+    return jsonResponse({ error: 'temporarily unavailable' }, 503);
   });
 
-  // 单次超时 1s → 总时限 4s。响应很快但一直坏，重试在第 3 次的 3s 间隔里撞上总时限，
+  // 单次超时 1s → 总时限 4s。服务一直失败，在第 3 次的 4s 退避期间撞上总时限，
   // 循环下一轮开头发现已到点，抛出总时限错误而不是继续无止境地试。
   await assert.rejects(
     callOpenAICompatible({

@@ -1367,7 +1367,7 @@ export function getChatState(ctx, settings) {
   let shouldSave = false;
   // 存量状态迁移：早期 characters 是普通 {}，读取时重建为 null-proto
   const rawCharacters = chatState.characters;
-  if (!rawCharacters || typeof rawCharacters !== 'object') {
+  if (!isPlainObject(rawCharacters)) {
     chatState.characters = Object.create(null);
     shouldSave = true;
   } else if (Object.getPrototypeOf(rawCharacters) !== null) {
@@ -1637,71 +1637,86 @@ async function getWorldInfoModule() {
   return worldInfoModulePromise;
 }
 
-function pushWorldBookNames(target, list) {
+function pushWorldBookNames(target, list, checks = null, source = 'unknown') {
+  const before = target.length;
   for (const item of Array.isArray(list) ? list : []) {
     const name = String(item || '').trim();
     if (name && !target.includes(name)) target.push(name);
   }
+  checks?.push({ source, status: Array.isArray(list) ? 'ok' : 'unavailable', nameCount: target.length - before });
+}
+
+function recordWorldBookDiscovery(kind, checks, names) {
+  const failed = checks.some(check => check.status === 'failed');
+  const available = checks.some(check => check.status === 'ok');
+  const status = names.length ? (failed ? 'partial' : 'resolved') : failed ? 'failed' : available ? 'empty' : 'unavailable';
+  const key = '__bs_biotracker_worldbook_discovery__';
+  // Last result per source kind only. No book names, contents or chat text.
+  globalThis[key] = { ...(globalThis[key] || {}), [kind]: { capturedAt: Date.now(), status, nameCount: names.length, checks } };
 }
 
 /** 世界书设置对象的候选来源：正规扩展与酒馆助手 iframe 注入环境的布局都覆盖 */
-function collectWorldInfoRoots(worldInfoModule = null) {
+function collectWorldInfoRoots(worldInfoModule = null, checks = []) {
   const roots = [];
-  const pushRoot = (root) => {
-    if (root && typeof root === 'object' && !roots.includes(root)) roots.push(root);
+  const pushRoot = (root, source) => {
+    if (root && typeof root === 'object' && !roots.some(item => item.root === root)) roots.push({ root, source });
   };
-  pushRoot(worldInfoModule?.world_info);
-  try { pushRoot(globalThis.world_info); } catch {}
-  try { pushRoot(globalThis.world_info_settings?.world_info); } catch {}
-  try { pushRoot(globalThis.power_user?.world_info); } catch {}
+  pushRoot(worldInfoModule?.world_info, 'module');
+  try { pushRoot(globalThis.world_info, 'global'); } catch { checks.push({ source: 'global', status: 'failed' }); }
+  try { pushRoot(globalThis.world_info_settings?.world_info, 'global'); } catch { checks.push({ source: 'global', status: 'failed' }); }
+  try { pushRoot(globalThis.power_user?.world_info, 'global'); } catch { checks.push({ source: 'global', status: 'failed' }); }
   try {
     const ctx = getHostContext();
-    pushRoot(ctx?.world_info);
-    pushRoot(ctx?.worldInfoSettings?.world_info);
-  } catch {}
+    pushRoot(ctx?.world_info, 'context');
+    pushRoot(ctx?.worldInfoSettings?.world_info, 'context');
+  } catch { checks.push({ source: 'context', status: 'failed' }); }
   try {
     const parentWin = globalThis.parent && globalThis.parent !== globalThis ? globalThis.parent : null;
     if (parentWin) {
-      pushRoot(parentWin.world_info);
-      pushRoot(parentWin.world_info_settings?.world_info);
+      pushRoot(parentWin.world_info, 'parent');
+      pushRoot(parentWin.world_info_settings?.world_info, 'parent');
     }
-  } catch {}
+  } catch { checks.push({ source: 'parent', status: 'failed' }); }
   return roots;
 }
 
 export async function getActiveGlobalWorldBookNames() {
   const names = [];
+  const checks = [];
 
   // 1) 经典 ST：world-info.js 模组的 selected_world_info（酒馆助手 iframe 注入时常 import 失败）
   const worldInfoModule = await getWorldInfoModule();
-  pushWorldBookNames(names, worldInfoModule?.selected_world_info);
+  pushWorldBookNames(names, worldInfoModule?.selected_world_info, checks, 'module');
 
   // 2) 运行时全局
-  try { pushWorldBookNames(names, globalThis.selected_world_info); } catch {}
+  try { pushWorldBookNames(names, globalThis.selected_world_info, checks, 'global'); }
+  catch { checks.push({ source: 'global', status: 'failed' }); }
 
   // 3) world_info.globalSelect（ST/TT 设置里的启用全域书）
-  for (const root of collectWorldInfoRoots(worldInfoModule)) {
-    pushWorldBookNames(names, root?.globalSelect);
+  for (const { root, source } of collectWorldInfoRoots(worldInfoModule, checks)) {
+    pushWorldBookNames(names, root?.globalSelect, checks, source);
   }
 
   // 4) 页面上的全域世界书多选框（若存在）
   try {
-    const select = document.querySelector?.('#world_info');
+    const select = globalThis.document?.querySelector?.('#world_info');
     if (select?.selectedOptions) {
-      pushWorldBookNames(names, Array.from(select.selectedOptions).map((option) => option.textContent || option.label || option.value));
+      pushWorldBookNames(names, Array.from(select.selectedOptions).map((option) => option.textContent || option.label || option.value), checks, 'dom');
     }
-  } catch {}
+  } catch { checks.push({ source: 'dom', status: 'failed' }); }
 
   // 5) 酒馆助手 API
-  for (const fn of [globalThis.getLorebookSettings, globalThis.TavernHelper?.getLorebookSettings]) {
+  for (const owner of [globalThis, globalThis.TavernHelper]) {
+    const fn = owner?.getLorebookSettings;
     if (typeof fn !== 'function') continue;
     try {
-      const lorebookSettings = await Promise.resolve(fn());
-      pushWorldBookNames(names, lorebookSettings?.selected_global_lorebooks);
-      pushWorldBookNames(names, lorebookSettings?.selected_world_info);
-    } catch {}
+      const lorebookSettings = await Promise.resolve(fn.call(owner));
+      pushWorldBookNames(names, lorebookSettings?.selected_global_lorebooks, checks, 'api');
+      pushWorldBookNames(names, lorebookSettings?.selected_world_info, checks, 'api');
+    } catch { checks.push({ source: 'api', status: 'failed' }); }
   }
 
+  recordWorldBookDiscovery('global', checks, names);
   return names;
 }
 
@@ -1721,32 +1736,37 @@ function matchCharLoreEntry(entry, avatarBaseName, cardName) {
  */
 export async function getCharacterAdditionalWorldBookNames(ctx) {
   const names = [];
+  const checks = [];
 
   // 1) 酒馆助手 API（iframe 注入环境；可能为 async）
-  for (const fn of [globalThis.getCharLorebooks, globalThis.TavernHelper?.getCharLorebooks]) {
+  for (const owner of [globalThis, globalThis.TavernHelper]) {
+    const fn = owner?.getCharLorebooks;
     if (typeof fn !== 'function') continue;
     try {
-      const books = await Promise.resolve(fn({ type: 'all' }));
+      const books = await Promise.resolve(fn.call(owner, { type: 'all' }));
       if (books && typeof books === 'object') {
-        pushWorldBookNames(names, books.additional);
-        pushWorldBookNames(names, books.extraBooks);
+        pushWorldBookNames(names, books.additional, checks, 'api');
+        pushWorldBookNames(names, books.extraBooks, checks, 'api');
       }
-    } catch {}
+    } catch { checks.push({ source: 'api', status: 'failed' }); }
   }
 
   // 2) world_info.charLore（world-info 模组与各运行时全局）
   const worldInfoModule = await getWorldInfoModule();
   const avatarBaseName = getCharacterAvatarBaseName(ctx);
   const cardName = String(getResolvedCharacter(ctx)?.card?.name || '').trim();
-  for (const root of collectWorldInfoRoots(worldInfoModule)) {
+  checks.push({ source: 'module', status: worldInfoModule ? 'ok' : 'unavailable', nameCount: 0 });
+  for (const { root, source } of collectWorldInfoRoots(worldInfoModule, checks)) {
     if (!Array.isArray(root?.charLore)) continue;
     const entry = root.charLore.find((item) => matchCharLoreEntry(item, avatarBaseName, cardName));
-    if (entry) pushWorldBookNames(names, entry.extraBooks);
+    pushWorldBookNames(names, entry?.extraBooks || [], checks, source);
   }
 
   // 主世界书名不要混进附加列表
   const primary = String(getCharacterWorldBookName(ctx) || '').trim();
-  return names.filter((name) => name && name !== primary);
+  const additional = names.filter((name) => name && name !== primary);
+  recordWorldBookDiscovery('character', checks, additional);
+  return additional;
 }
 
 /**
@@ -1778,25 +1798,36 @@ export async function loadCharacterAdditionalWorldBooks(ctx, { loadBook, filterB
 export async function loadGlobalWorldBook(ctx, name) {
   const normalizedName = String(name || '').trim();
   if (!normalizedName) return null;
+  const checks = [];
+  const finish = (book) => {
+    recordWorldBookDiscovery('load', checks, book ? ['loaded'] : []);
+    return book;
+  };
   if (canLoadHostWorldInfo(ctx)) {
     try {
-      return await loadHostWorldInfo(ctx, normalizedName);
+      const book = await loadHostWorldInfo(ctx, normalizedName);
+      checks.push({ source: 'context', status: 'ok', nameCount: book ? 1 : 0 });
+      if (book) return finish(book);
     } catch (error) {
       console.warn(`[BS BioTracker] load active global worldbook "${normalizedName}" failed`, error);
+      checks.push({ source: 'context', status: 'failed' });
     }
   }
   try {
     const worldBook = await getHostWorldBook(normalizedName, 'global');
-    if (worldBook) return worldBook;
+    checks.push({ source: 'api', scope: 'global', status: typeof globalThis.ST_API?.worldBook?.get === 'function' ? 'ok' : 'unavailable', nameCount: worldBook ? 1 : 0 });
+    if (worldBook) return finish(worldBook);
   } catch (error) {
     console.warn(`[BS BioTracker] host get active global worldbook "${normalizedName}" failed`, error);
+    checks.push({ source: 'api', scope: 'global', status: 'failed' });
   }
   // 附加知识书有时只能按 character scope 取到
   try {
     const worldBook = await getHostWorldBook(normalizedName, 'character');
-    if (worldBook) return worldBook;
-  } catch {}
-  return null;
+    checks.push({ source: 'api', scope: 'character', status: typeof globalThis.ST_API?.worldBook?.get === 'function' ? 'ok' : 'unavailable', nameCount: worldBook ? 1 : 0 });
+    if (worldBook) return finish(worldBook);
+  } catch { checks.push({ source: 'api', scope: 'character', status: 'failed' }); }
+  return finish(null);
 }
 
 export function getTargetNames(ctx, settings) {
@@ -2052,12 +2083,9 @@ function createSnapshotCharacterBaseline(name = '') {
 
 function compactSnapshotRecord(value) {
   if (!isPlainObject(value)) return value;
-  const result = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (entry === undefined || entry === null || entry === '') continue;
-    result[key] = entry;
-  }
-  return result;
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => (
+    entry !== undefined && entry !== null && entry !== ''
+  )));
 }
 
 function compactSnapshotArrayEntries(list) {
@@ -2087,9 +2115,10 @@ function normalizeCharacterForSnapshot(character, name = '') {
 }
 
 function packSnapshotCharacters(characters) {
-  const source = characters && typeof characters === 'object' ? characters : {};
-  const packed = {};
+  const source = isPlainObject(characters) ? characters : {};
+  const packed = Object.create(null);
   for (const [name, item] of Object.entries(source)) {
+    if (!isPlainObject(item)) continue;
     const normalized = normalizeCharacterForSnapshot(item, name);
     const baseline = createSnapshotCharacterBaseline(normalized.name || name);
     const patch = buildStateDeltaPatch(baseline, normalized);
@@ -2099,9 +2128,10 @@ function packSnapshotCharacters(characters) {
 }
 
 function unpackSnapshotCharacters(characters, format = '') {
-  if (!characters || typeof characters !== 'object') return {};
-  const unpacked = {};
+  const unpacked = Object.create(null);
+  if (!isPlainObject(characters)) return unpacked;
   for (const [name, item] of Object.entries(characters)) {
+    if (!isPlainObject(item)) continue;
     if (format === 'default_delta_v1') {
       const baseline = createSnapshotCharacterBaseline(name);
       const restored = applyStateDeltaPatch(baseline, item && typeof item === 'object' ? item : {});
@@ -2230,7 +2260,7 @@ function buildStateDeltaPatch(previousValue, nextValue) {
     return JSON.stringify(previousValue) === JSON.stringify(nextValue) ? undefined : cloneValue(nextValue);
   }
 
-  const patch = {};
+  const patch = Object.create(null);
   let changed = false;
   const keys = new Set([...Object.keys(previousValue), ...Object.keys(nextValue)]);
   for (const key of keys) {
@@ -2265,9 +2295,12 @@ function applyStateDeltaPatch(previousValue, deltaPatch) {
       delete base[key];
       continue;
     }
-    const nextValue = applyStateDeltaPatch(base[key], value);
+    // Cloning/JSON restores ordinary prototypes. Only own fields are prior data,
+    // and defining an own property must not invoke the __proto__ setter.
+    const previousEntry = Object.prototype.hasOwnProperty.call(base, key) ? base[key] : undefined;
+    const nextValue = applyStateDeltaPatch(previousEntry, value);
     if (nextValue === undefined) delete base[key];
-    else base[key] = nextValue;
+    else Object.defineProperty(base, key, { value: nextValue, writable: true, enumerable: true, configurable: true });
   }
   return base;
 }
@@ -2330,6 +2363,7 @@ function materializeSnapshotPayloadAt(snapshots, index, cache = new Map()) {
   const snapshot = snapshots[index];
   let payload;
   if (snapshot?.snapshotMode === 'patch') {
+    if (index === 0) throw new Error('Cannot restore a snapshot patch without its base snapshot.');
     const previousPayload = materializeSnapshotPayloadAt(snapshots, index - 1, cache);
     payload = applyStateDeltaPatch(previousPayload, snapshot.stateDelta || {});
   } else {
@@ -2461,9 +2495,15 @@ function markRestoredSnapshot(chatState, snapshot) {
 export function restoreChatStateFromSnapshot(chatState, snapshot) {
   if (!snapshot) return;
   const snapshotIndex = findSnapshotIndex(chatState, snapshot);
+  if (snapshotIndex < 0 && snapshot.snapshotMode === 'patch') {
+    throw new Error('Cannot restore a detached snapshot patch without its history.');
+  }
   const payload = snapshotIndex >= 0
     ? materializeSnapshotPayloadAt(chatState.snapshots, snapshotIndex)
     : (snapshot?.stateSnapshot ? cloneValue(snapshot.stateSnapshot) : createEmptyChatState());
+  // Failure signatures belong to the current chat's retry gate. Automatic
+  // reconciliation must preserve them; manual runs bypass that gate and clear
+  // it only after success in tracker.js.
   chatState.lastAttemptedSignature = payload.lastAttemptedSignature || '';
   chatState.lastProcessedSignature = payload.lastProcessedSignature || '';
   chatState.lastRunAt = payload.lastRunAt || 0;
@@ -2574,4 +2614,3 @@ export function formatStatusText(chatState) {
 }
 
 export { getCharacterStatusTags } from './status_tag_matrix.js';
-

@@ -938,7 +938,8 @@ export function buildTrackerPayload(ctx, settings, reason = 'manual', endIndexEx
   const existingState = chatState.characters || {};
   const recentMessages = buildRecentMessages(ctx, settings, endIndexExclusive);
   const useMainflowMode = normalizeWorldbookMode(settings?.trackerWorldbookMode) === 'mainflow';
-  let mainflowContextSnapshot = useMainflowMode ? getMainflowContextSnapshot(ctx) : null;
+  const isHistoricalReplay = Number.isInteger(endIndexExclusive) && endIndexExclusive < getHostChat(ctx).length;
+  let mainflowContextSnapshot = useMainflowMode && !isHistoricalReplay ? getMainflowContextSnapshot(ctx) : null;
   if (mainflowContextSnapshot && settings?.useStPresetForAsync) {
     mainflowContextSnapshot = {
       ...mainflowContextSnapshot,
@@ -955,10 +956,15 @@ export function buildTrackerPayload(ctx, settings, reason = 'manual', endIndexEx
   const payloadWorldBook = mainflowContextSnapshot ? null : filteredWorldBook;
   const diaryEnabled = getDiaryRecentLimit(settings, Object.keys(existingState || {}).length) > 0;
   const psychologyEnabled = hasBreedingPsychology(existingState);
+  const usesDefaultPrompt = String(settings.systemPrompt || DEFAULT_SYSTEM_PROMPT).trim() === DEFAULT_SYSTEM_PROMPT.trim();
   return {
     reason,
     chat_id: getChatKey(ctx),
-    current_character: {
+    current_character: usesDefaultPrompt ? {
+      name: currentCharacter.name || '',
+      personality: currentCharacter.personality || '',
+      scenario: currentCharacter.scenario || '',
+    } : {
       ...currentCharacter,
       worldBook: payloadWorldBook,
     },
@@ -1008,7 +1014,8 @@ function getTrackerToolCalls(result) {
     result?.data?.operations,
   ];
   const calls = candidates.find((value) => Array.isArray(value));
-  return Array.isArray(calls) ? calls.map(normalizeTrackerCall) : [];
+  if (!calls) throw new Error('追踪响应缺少有效的 tool_calls 数组；无变化时也必须显式返回空数组。');
+  return calls.map(normalizeTrackerCall);
 }
 
 function getCharacterChecks(result) {
@@ -1038,7 +1045,7 @@ function buildCharacterCheckCoverage(expectedNames, checks) {
 }
 
 function normalizeTrackerResult(result) {
-  if (!result || typeof result !== 'object') {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
     throw new Error('Tracker response must be a JSON object.');
   }
   return {
@@ -1265,7 +1272,8 @@ async function processTrackerMessage(ctx, settings, chatState, deps, reason, mes
   const rawResult = await callOpenAICompatible(
     settings,
     payload,
-    systemPrompt
+    systemPrompt,
+    { historicalReplay: messageIndex < chat.length - 1 },
   );
   recordTrackerResultDebug(rawResult);
 

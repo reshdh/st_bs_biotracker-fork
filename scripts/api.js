@@ -20,7 +20,7 @@ const MAINFLOW_SYSTEM_EXCLUDE_PATTERNS = [
   /^Apply Identity Override/i,
   /^\[Identity:/i,
 ];
-const MAINFLOW_CHAT_EXCLUDE_PATTERNS = [];
+export const CONTEXT_MESSAGE_CHAR_LIMIT = 65536;
 export function extractJson(text) {
   if (!text) return null;
   try {
@@ -297,6 +297,17 @@ function shouldUseHostProxy(url) {
 }
 
 function shouldFallbackFromHostProxy(responseText, status) {
+  // A structured upstream error (especially credentials/rate limits) is not
+  // evidence that the host route is unavailable. CSRF belongs to the host.
+  const text = String(responseText || '');
+  if (/csrf/i.test(text) && (status === 401 || status === 403)) return true;
+  if (/invalid.?api.?key|incorrect api key|authentication_error|permission_denied/i.test(text)) return false;
+  // Hosts can also wrap missing-route messages in JSON {error: ...}.
+  // A missing model/key is still an upstream failure, not a route failure.
+  if ([404, 405].includes(status) && /cannot\s+(?:post|get)\b|route\s+not\s+found|no\s+route\b/i.test(text)) return true;
+  try {
+    if (JSON.parse(text)?.error) return false;
+  } catch {}
   // 不含 429：上游限流时再直连一次等于对已限流的端点翻倍施压，
   // 而浏览器跨域直连多半又会 CORS 失败，白白多打一次
   return status === 401
@@ -364,7 +375,8 @@ export function resolveOverallDeadlineMs(settings) {
 }
 
 async function fetchText(url, options = {}) {
-  const { timeoutMs, externalSignal, deadlineMs, ...fetchOptions } = options;
+  const { timeoutMs, externalSignal, deadlineMs, metrics, ...fetchOptions } = options;
+  if (externalSignal?.aborted) throw createApiDeadlineError(Number(deadlineMs) || 0);
   const limitMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : 0;
   const canAbort = typeof AbortController === 'function';
   const controller = canAbort && (limitMs > 0 || externalSignal) ? new AbortController() : null;
@@ -401,10 +413,13 @@ async function fetchText(url, options = {}) {
     }
   }
   try {
+    if (metrics) metrics.httpRequests += 1;
     const response = await fetch(url, fetchOptions);
     const responseText = await response.text().catch((error) => (
       `[failed to read response text: ${String(error?.message || error)}]`
     ));
+    if (externalAborted) throw createApiDeadlineError(Number(deadlineMs) || 0);
+    if (timedOut) throw createApiTimeoutError(limitMs);
     return { response, responseText };
   } catch (error) {
     // 总时限优先：它触发时单次超时可能也顺带 abort，但要归因到「整轮超时」
@@ -455,6 +470,7 @@ async function requestHostProxyChatCompletion(apiBase, settings, requestBody, ru
     timeoutMs: resolveApiTimeoutMs(settings),
     externalSignal: runContext.signal || null,
     deadlineMs: runContext.deadlineMs || 0,
+    metrics: runContext.metrics,
   });
 }
 
@@ -466,28 +482,36 @@ function buildJsonRetryInstruction() {
   ].join('\n');
 }
 
-function summarizeModelText(text) {
-  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!normalized) return '模型返回为空字符串';
-  return normalized.slice(0, 300);
+const GLOBAL_API_MAX_RETRIES = 3;
+
+function apiError(code, message, details = {}) {
+  return Object.assign(new Error(message), { code, retryable: false }, details);
 }
 
-const GLOBAL_API_MAX_RETRIES = 3;
+function getRetryAfterMs(response) {
+  const value = response?.headers?.get?.('retry-after');
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? Math.max(0, time - Date.now()) : 0;
+}
 
 /** 可被信号中断的等待：总时限在重试间隔期间触发时，不必把这几秒也白等完 */
 function sleepMs(ms, signal) {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, Math.max(0, Number(ms) || 0));
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, Math.min(2147483647, Math.max(0, Number(ms) || 0)));
     if (signal) {
       if (signal.aborted) {
-        clearTimeout(timer);
-        resolve();
+        finish();
         return;
       }
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
+      signal.addEventListener('abort', finish, { once: true });
     }
   });
 }
@@ -497,13 +521,14 @@ function isNonRetriableApiError(error) {
   if (isApiTimeoutError(error)) return true;
   // 总时限触发意味着整轮已经没有时间预算了，不能再开新一轮
   if (isApiDeadlineError(error)) return true;
+  if (typeof error?.retryable === 'boolean') return !error.retryable;
   const message = String(error?.message || error || '');
   // 配置/鉴权类错误重试无意义
   return /请先填写|尚未配置|API URL 或模型名称|无法解析|仅允许本机或内网|其他协议一律拒绝|401|403|Unauthorized|invalid.?api.?key|Incorrect API key/i.test(message);
 }
 
 /**
- * 全局自动重试：首次失败后按 1s/2s/3s 间隔再试，最多 3 次（合计最多 4 轮）。
+ * 全局自动重试：临时错误按 1s/2s/4s 退避，尊重 Retry-After，最多 4 轮。
  * 计数按「总轮次」显示（1/4…4/4），避免出现「3/3 满了却还有一轮在跑」的误解。
  * overallSignal 触发（总时限到）时立刻停手，不再开新一轮。
  */
@@ -519,11 +544,12 @@ async function withGlobalApiRetries(task, options = {}) {
       break;
     }
     try {
+      if (attempt > 0 && options.metrics) options.metrics.globalRetries += 1;
       return await task(attempt);
     } catch (error) {
       lastError = error;
       if (isNonRetriableApiError(error) || attempt >= maxRetries) break;
-      const delay = 1000 * (attempt + 1);
+      const delay = Math.max(1000 * (2 ** attempt), Number(error?.retryAfterMs) || 0);
       console.warn(`[BS BioTracker] ${label} 第 ${attempt + 1}/${totalTries} 次失败，将在 ${delay}ms 后重试`, error);
       try {
         globalThis.toastr?.warning?.(`${label} 第 ${attempt + 1}/${totalTries} 次失败，${Math.round(delay / 1000)}s 后重试`, '[BS BioTracker]');
@@ -573,6 +599,7 @@ function recordEffectiveRequestDebug(source, presetName, sampling, messages, bod
     sampling: sampling && typeof sampling === 'object' ? sanitizeTransportValue(sampling) : {},
     body: body && typeof body === 'object' ? sanitizeTransportValue(body) : null,
   };
+  return globalThis[DEBUG_LAST_EFFECTIVE_REQUEST_KEY];
 }
 
 function getSillyTavernContext() {
@@ -619,10 +646,7 @@ function shouldKeepMainflowChatMessage(content) {
   if (!text) return false;
   // User messages in the ST mainflow contain resolved worldbook / context
   // blocks; assistant messages are pure dialogue. Keep only the former.
-  if (/>\s*<world_info[\s>]/i.test(text)) return true;
-  if (/>\s*<game_setting[\s>]/i.test(text)) return true;
-  if (/>\s*<chathistory[\s>]/i.test(text)) return true;
-  if (/>\s*<world_logic[\s>]/i.test(text)) return true;
+  if (hasMainflowContextBlock(text)) return true;
   if (text.length > 2000) return true;
   return false;
 }
@@ -631,8 +655,8 @@ function filterRecentMessagesForMainflowCopy(recentMessages, settings = null) {
   const originalMessages = Array.isArray(recentMessages) ? recentMessages : [];
   const filteredMessages = originalMessages.filter((message) => {
     if (!message || typeof message !== 'object') return false;
-    if (message.role === 'user') return true;
-    return shouldKeepMainflowChatMessage(message.text || message.content || '');
+    // Short assistant replies can contain the event that triggered tracking.
+    return Boolean(String(message.text ?? message.content ?? '').trim());
   });
   const trimmedMessages = filteredMessages.slice(-resolveMainflowCopyMessageLimit(settings));
   return {
@@ -645,7 +669,71 @@ function filterRecentMessagesForMainflowCopy(recentMessages, settings = null) {
 }
 
 function resolveMainflowCopyMessageLimit(settings) {
-  return Math.max(2, Number(settings?.contextSize) || 12);
+  const count = Number(settings?.contextSize);
+  return Number.isFinite(count) && count > 0 ? Math.max(2, Math.floor(count)) : 12;
+}
+
+function hasMainflowContextBlock(text) {
+  return /<(?:world_info|game_setting|chathistory|world_logic)[\s>]/i.test(String(text || ''));
+}
+
+function boundContextMessages(payload, settings) {
+  // This bounds the serialized message arrays, including keys/JSON escaping.
+  // It is a character guard, not a tokenizer or a limit on the whole request.
+  const fields = ['recent_messages', 'mainflow_resolved_messages', 'mainflow_resolved_system_messages']
+    .filter(key => Array.isArray(payload?.[key]));
+  const originalChars = JSON.stringify(Object.fromEntries(fields.map(key => [key, payload[key]]))).length;
+  const sources = Object.fromEntries(fields.map(key => [key, payload[key]
+    .filter(message => message && typeof message === 'object' && String(message.text ?? message.content ?? '').trim())
+    .slice(key === 'mainflow_resolved_system_messages' ? 0 : -resolveMainflowCopyMessageLimit(settings))]));
+  const selected = Object.fromEntries(fields.map(key => [key, new Set()]));
+  const recent = sources.recent_messages || [];
+  if (recent.length) selected.recent_messages.add(recent.length - 1);
+  for (const role of ['user', 'assistant']) {
+    const index = recent.findLastIndex(message => message.role === role);
+    if (index >= 0) selected.recent_messages.add(index);
+  }
+  for (const key of fields) {
+    sources[key].forEach((message, index) => {
+      if (key === 'mainflow_resolved_system_messages' || message.role === 'system'
+          || (key === 'mainflow_resolved_messages' && hasMainflowContextBlock(message.content))) {
+        selected[key].add(index);
+      }
+    });
+  }
+  const materialize = () => Object.fromEntries(fields.map(key => [key, sources[key].filter((_message, index) => selected[key].has(index))]));
+  const measure = () => JSON.stringify(materialize()).length;
+  if (measure() > CONTEXT_MESSAGE_CHAR_LIMIT) {
+    throw apiError('BS_CONTEXT_TOO_LARGE', `最新关键消息或主流背景超过 ${CONTEXT_MESSAGE_CHAR_LIMIT} 个 UTF-16 单元的消息预算，未发送请求。请缩短本轮消息或需要引用的主流背景后重试。`);
+  }
+  // Recent dialogue gets the remaining allowance before supplemental history.
+  // Unknown source identity is retained; equal text alone is not a duplicate.
+  for (const key of fields) {
+    for (let index = sources[key].length - 1; index >= 0; index--) {
+      if (selected[key].has(index)) continue;
+      selected[key].add(index);
+      if (measure() > CONTEXT_MESSAGE_CHAR_LIMIT) {
+        selected[key].delete(index);
+        break;
+      }
+    }
+  }
+  const messages = materialize();
+  const next = { ...payload, ...messages };
+  if (next.mainflow_snapshot_meta) {
+    next.mainflow_snapshot_meta = {
+      ...next.mainflow_snapshot_meta,
+      retained_recent_message_count: messages.recent_messages?.length || 0,
+      retained_message_count: messages.mainflow_resolved_messages?.length || 0,
+    };
+  }
+  return {
+    payload: next,
+    stats: {
+      limitChars: CONTEXT_MESSAGE_CHAR_LIMIT, originalChars, retainedChars: measure(),
+      omittedMessages: fields.reduce((sum, key) => sum + payload[key].length - messages[key].length, 0),
+    },
+  };
 }
 
 function buildPayloadWithMainflowCopy(payload, settings = null) {
@@ -910,12 +998,12 @@ function extractClaudeText(data) {
 
 function normalizeResponsesData(data) {
   const text = extractResponsesText(data);
-  return { choices: [{ message: { content: text } }] };
+  return { ...data, choices: [{ message: { content: text }, finish_reason: data?.choices?.[0]?.finish_reason || (data?.status === 'incomplete' ? 'length' : data?.status) }] };
 }
 
 function normalizeClaudeData(data) {
   const text = extractClaudeText(data);
-  return { choices: [{ message: { content: text } }] };
+  return { ...data, choices: [{ message: { content: text }, finish_reason: data?.choices?.[0]?.finish_reason || data?.stop_reason }] };
 }
 
 /**
@@ -983,14 +1071,13 @@ function extractGeminiInteractionsText(data) {
       if (block?.type === 'text' && typeof block.text === 'string') text += block.text;
     }
   }
-  if (!text) {
-    throw new Error(`Gemini Interactions 回覆没有可消费的文本（status: ${status || 'unknown'}）`);
-  }
+  // Empty text and truncated output are classified by parseModelObject after
+  // normalization, so an incomplete response is not mislabeled as bad JSON.
   return text;
 }
 
 function normalizeGeminiInteractionsData(data) {
-  return { choices: [{ message: { content: extractGeminiInteractionsText(data) } }] };
+  return { ...data, choices: [{ message: { content: extractGeminiInteractionsText(data) }, finish_reason: data?.choices?.[0]?.finish_reason || (data?.status === 'incomplete' ? 'length' : data?.status) }] };
 }
 
 /** 直连时按格式转换请求体；宿主代理走格式感知翻译时用不到（后端自己转）。 */
@@ -1005,8 +1092,8 @@ function buildDirectPayload(fmt, requestBody) {
       top_p: requestBody.top_p,
       seed: requestBody.seed,
     };
-    if (requestBody.max_tokens) payload.max_output_tokens = requestBody.max_tokens;
-    if (requestBody.max_completion_tokens) payload.max_output_tokens = requestBody.max_completion_tokens;
+    const maxTokens = requestBody.max_tokens ?? requestBody.max_completion_tokens;
+    if (maxTokens) payload.max_output_tokens = maxTokens;
     if (requestBody.response_format?.type === 'json_object') {
       payload.text = { format: { type: 'json_object' } };
     }
@@ -1022,6 +1109,8 @@ function buildDirectPayload(fmt, requestBody) {
 }
 
 async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
+  if (runContext.signal?.aborted) throw createApiDeadlineError(runContext.deadlineMs);
+  if (runContext.metrics) runContext.metrics.logicalRequests += 1;
   const logApiDebug = (phase, details = {}) => {
     if (!globalThis.__bs_biotracker_debug_api__) return;
     try {
@@ -1034,6 +1123,8 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
   };
 
   const postBody = async (requestBody, attempt = 'primary') => {
+    if (runContext.signal?.aborted) throw createApiDeadlineError(runContext.deadlineMs);
+    if (runContext.metrics && attempt !== 'primary') runContext.metrics.formatFallbacks += 1;
     const previousAsyncFlag = globalThis.__bs_biotracker_async_request__;
     globalThis.__bs_biotracker_async_request__ = true;
     const fmt = normalizeApiFormat(settings?.apiFormat);
@@ -1042,7 +1133,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
     // TT 后端按 custom_api_format 在服务端翻译；原版 ST 后端不认得这个字段
     const formatAwareProxy = !isCompat && hostSupportsFormatAwareProxy();
     // ST/Luker 的 /proxy/<url> 透传代理：服务端原样转发绕开 CORS（需 config.yaml 开启 enableCorsProxy，未开启返回 404）
-    const transparentProxyUrl = !isCompat && !formatAwareProxy && isBrowserRuntime() && isCrossOriginUrl(upstreamUrl)
+    const transparentProxyUrl = !globalThis[HOST_PROXY_DISABLED_KEY] && !isCompat && !formatAwareProxy && isBrowserRuntime() && isCrossOriginUrl(upstreamUrl)
       ? `/proxy/${upstreamUrl}`
       : null;
     const canUseHostProxy = shouldUseHostProxy(upstreamUrl) && (isCompat || formatAwareProxy);
@@ -1076,11 +1167,15 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
           if (isApiTimeoutError(error) || isApiDeadlineError(error)) throw error;
         }
         if (proxyError || (!response.ok && shouldFallbackFromHostProxy(responseText, response.status))) {
+          if (runContext.metrics) runContext.metrics.proxyFallbacks += 1;
           transport = proxyError ? 'direct-after-proxy-error' : `direct-after-proxy-${response.status}`;
           url = upstreamUrl;
-          if (!proxyError && (response.status === 401 || response.status === 403)) {
+          if (!proxyError && [401, 403, 404, 405].includes(response.status)) {
             disableHostProxyForSession(response.status, responseText);
           }
+          // The format-aware proxy accepted compat messages; a direct native
+          // endpoint needs its own input/system/output-budget field names.
+          requestText = JSON.stringify(buildDirectPayload(fmt, requestBody));
           ({ response, responseText } = await fetchText(upstreamUrl, {
             method: 'POST',
             headers: getAuthHeaders(settings),
@@ -1088,6 +1183,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
             timeoutMs: resolveApiTimeoutMs(settings),
             externalSignal: runContext.signal || null,
             deadlineMs: runContext.deadlineMs || 0,
+            metrics: runContext.metrics,
           }));
         }
       } else if (transparentProxyUrl) {
@@ -1100,6 +1196,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
             timeoutMs: resolveApiTimeoutMs(settings),
             externalSignal: runContext.signal || null,
             deadlineMs: runContext.deadlineMs || 0,
+            metrics: runContext.metrics,
           }));
         } catch (error) {
           proxyError = error;
@@ -1107,8 +1204,12 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
           if (isApiTimeoutError(error) || isApiDeadlineError(error)) throw error;
         }
         if (proxyError || (!response.ok && shouldFallbackFromHostProxy(responseText, response.status))) {
+          if (runContext.metrics) runContext.metrics.proxyFallbacks += 1;
           transport = proxyError ? 'direct-after-proxy-error' : `direct-after-proxy-${response.status}`;
           url = upstreamUrl;
+          if (!proxyError && [401, 403, 404, 405].includes(response.status)) {
+            disableHostProxyForSession(response.status, responseText);
+          }
           ({ response, responseText } = await fetchText(upstreamUrl, {
             method: 'POST',
             headers: getAuthHeaders(settings),
@@ -1116,6 +1217,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
             timeoutMs: resolveApiTimeoutMs(settings),
             externalSignal: runContext.signal || null,
             deadlineMs: runContext.deadlineMs || 0,
+            metrics: runContext.metrics,
           }));
         }
       } else {
@@ -1126,6 +1228,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
           timeoutMs: resolveApiTimeoutMs(settings),
           externalSignal: runContext.signal || null,
           deadlineMs: runContext.deadlineMs || 0,
+          metrics: runContext.metrics,
         }));
       }
       traceRequestToUi('POST', upstreamUrl, response.status, transport);
@@ -1177,16 +1280,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
   const isNonCompatFormat = isResponses || isClaude || isGemini;
 
   if (!response.ok && response.status === 400 && body.response_format && !isNonCompatFormat) {
-    const fallbackBody = {
-      model: body.model,
-      temperature: body.temperature,
-      top_p: body.top_p,
-      frequency_penalty: body.frequency_penalty,
-      presence_penalty: body.presence_penalty,
-      max_tokens: body.max_tokens,
-      seed: body.seed,
-      messages: body.messages,
-    };
+    const { response_format: _unsupported, ...fallbackBody } = body;
     result = await postBody(fallbackBody, 'without_response_format');
     response = result.response;
     responseText = result.responseText;
@@ -1198,6 +1292,8 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
     const minimalBody = {
       model: body.model,
       messages: body.messages,
+      ...(body.max_tokens !== undefined ? { max_tokens: body.max_tokens } : {}),
+      ...(body.max_completion_tokens !== undefined ? { max_completion_tokens: body.max_completion_tokens } : {}),
     };
     result = await postBody(minimalBody, 'minimal');
     response = result.response;
@@ -1206,21 +1302,39 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(`API ${response.status}［实际请求: ${getApiUrlForFormat(apiBase, result.format)}］: ${sanitizeErrorText(errorText)}`);
+    throw apiError('BS_API_HTTP', `API ${response.status}［实际请求: ${getApiUrlForFormat(apiBase, result.format)}］: ${sanitizeErrorText(errorText)}`, {
+      status: response.status,
+      retryable: [408, 425, 429].includes(response.status) || response.status >= 500,
+      retryAfterMs: getRetryAfterMs(response),
+    });
   }
   try {
     const parsed = JSON.parse(responseText);
-    if (isResponses) return normalizeResponsesData(parsed);
-    if (isClaude) return normalizeClaudeData(parsed);
-    if (isGemini) return normalizeGeminiInteractionsData(parsed);
-    return parsed;
+    if (parsed?.error) throw apiError('BS_API_PROVIDER', `API 返回错误：${sanitizeErrorText(JSON.stringify(parsed.error))}`);
+    const normalized = isResponses ? normalizeResponsesData(parsed)
+      : isClaude ? normalizeClaudeData(parsed)
+        : isGemini ? normalizeGeminiInteractionsData(parsed) : parsed;
+    if (runContext.metrics) {
+      const usage = normalized?.usage || {};
+      const tokenCount = (...values) => values.find(value => typeof value === 'number' && Number.isFinite(value)) ?? null;
+      runContext.metrics.responses.push({
+        kind: runContext.requestKind,
+        format: result.format,
+        finishReason: normalized?.choices?.[0]?.finish_reason || null,
+        inputTokens: tokenCount(usage.prompt_tokens, usage.input_tokens, usage.total_input_tokens),
+        outputTokens: tokenCount(usage.completion_tokens, usage.output_tokens, usage.total_output_tokens),
+        outputChars: String(normalized?.choices?.[0]?.message?.content || '').length,
+      });
+    }
+    return normalized;
   } catch (error) {
     logApiDebug('parse_error', {
       status: response.status,
       responseText,
       error,
     });
-    throw error;
+    if (error?.code) throw error;
+    throw apiError('BS_API_RESPONSE', 'API 响应不是有效的协议 JSON。', { retryable: error instanceof SyntaxError });
   }
 }
 
@@ -1327,11 +1441,10 @@ function buildPresetMessagesFromPrompts(prompts, presetOverrides, baseSystemProm
   return merged;
 }
 
-async function buildPresetEnvelope(settings, baseSystemPrompt, payloadText) {
+async function buildPresetEnvelope(settings, baseSystemPrompt, payloadText, stCtx) {
   try {
     const resolved = await getResolvedPreset(settings);
     if (!resolved) return null;
-    const stCtx = getSillyTavernContext();
     const { presetName, preset } = resolved;
     const overrides = settings?.trackerPromptToggleOverrides || {};
     const presetOverrides = overrides[presetName] || {};
@@ -1345,13 +1458,37 @@ async function buildPresetEnvelope(settings, baseSystemPrompt, payloadText) {
   }
 }
 
-export async function callOpenAICompatible(settings, payload, systemPrompt = DEFAULT_SYSTEM_PROMPT) {
+function parseModelObject(data) {
+  const choice = data?.choices?.[0];
+  const finishReason = String(choice?.finish_reason || '');
+  if (['length', 'max_tokens', 'max_output_tokens'].includes(finishReason)) {
+    throw apiError('BS_MODEL_TRUNCATED', '模型输出因长度上限被截断，未应用本次结果。请提高输出上限或减少单次更新内容。');
+  }
+  const content = String(choice?.message?.content || '').trim();
+  if (!content) throw apiError('BS_MODEL_EMPTY', '模型返回了空内容，未应用本次结果。');
+  let parsed;
+  try { parsed = JSON.parse(content); }
+  catch {
+    parsed = extractJson(content);
+    if (parsed === null) return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw apiError('BS_MODEL_SHAPE', '模型必须返回 JSON 对象，不能返回数组、标量或 null。');
+  }
+  return parsed;
+}
+
+export async function callOpenAICompatible(settings, payload, systemPrompt = DEFAULT_SYSTEM_PROMPT, options = {}) {
   const apiBase = getApiBase(settings);
   const model = String(settings.model || '').trim();
-  const stCtx = getSillyTavernContext();
+  // Host macro/world-info resolvers see the live chat, not the replayed floor.
+  // Keep replay's already-filtered input and literal macros; preset sampling
+  // still applies. This request option is internal and never sent to the model.
+  const stCtx = options.historicalReplay ? null : getSillyTavernContext();
   const resolvedPayload = await buildResolvedAsyncPayload(payload, stCtx, settings);
   const mainflowCopy = buildPayloadWithMainflowCopy(resolvedPayload, settings);
-  const safePayload = sanitizeTransportValue(mainflowCopy.payload);
+  const boundedContext = boundContextMessages(sanitizeTransportValue(mainflowCopy.payload), settings);
+  const safePayload = boundedContext.payload;
   const safeSystemPrompt = sanitizeTransportString(resolveWithStMacros(systemPrompt || DEFAULT_SYSTEM_PROMPT, stCtx));
   const baseMessages = [
     { role: 'system', content: safeSystemPrompt },
@@ -1363,7 +1500,7 @@ export async function callOpenAICompatible(settings, payload, systemPrompt = DEF
   // Never stage an internal payload in the active chat to resolve presets: hosts
   // and extensions may persist that synthetic message as visible chat content.
   const presetEnvelope = shouldApplyAsyncPreset(settings)
-    ? await buildPresetEnvelope(settings, safeSystemPrompt, payloadText)
+    ? await buildPresetEnvelope(settings, safeSystemPrompt, payloadText, stCtx)
     : null;
   let effectiveMessages = presetEnvelope?.messages?.length ? presetEnvelope.messages : baseMessages;
   const stPresetSampling = presetEnvelope?.sampling || {};
@@ -1387,11 +1524,11 @@ export async function callOpenAICompatible(settings, payload, systemPrompt = DEF
     ...stPresetSampling,
     messages: effectiveMessages,
     // 注册请求返回的 JSON 含 6×6 stageProfiles 等大量文字，上限给足避免截断；
-    // max_tokens 是上限不是目标，实际生成多少收多少，设大无额外代价
+    // 这是输出上限；保留既有值，不用 UI 的输入警示预算替代。
     ...(isRegistry ? { max_tokens: 30720 } : {}),
     ...(useFormattedOutputV4 ? { response_format: { type: 'json_object' } } : {}),
   };
-  recordEffectiveRequestDebug(
+  const requestDebug = recordEffectiveRequestDebug(
     `${safePayload?.target_character ? 'registry' : 'tracker'}${mainflowCopy.hasMainflowCopy ? '-mainflow-copy' : (safePayload?.resolved_worldbook_prompt ? '-mainflow-worldinfo' : '')}${useFormattedOutputV4 ? '' : '-no-response-format'}${injectV4Instruction ? '-v4-instruction' : ''}`,
     effectivePresetName,
     stPresetSampling,
@@ -1412,37 +1549,49 @@ export async function callOpenAICompatible(settings, payload, systemPrompt = DEF
       } catch {}
     }, deadlineMs);
   }
-  const runContext = { signal: overallController?.signal || null, deadlineMs };
+  const metrics = {
+    logicalRequests: 0, httpRequests: 0, jsonRepairs: 0, globalRetries: 0,
+    formatFallbacks: 0, proxyFallbacks: 0, responses: [],
+    flow: String(safePayload?.reason || (isRegistry ? 'registry' : 'tracker')),
+    context: boundedContext.stats,
+  };
+  requestDebug.diagnostics = metrics;
+  const startedAt = Date.now();
+  const runContext = { signal: overallController?.signal || null, deadlineMs, metrics, requestKind: 'initial' };
+  let jsonRepairUsed = false;
 
   try {
     return await withGlobalApiRetries(async (globalAttempt) => {
+      runContext.requestKind = globalAttempt === 0 ? 'initial' : 'globalRetry';
       const data = await requestChatCompletion(apiBase, settings, body, runContext);
+      let parsed = parseModelObject(data);
+      if (parsed) return parsed;
+      if (jsonRepairUsed) throw apiError('BS_MODEL_JSON', '模型仍未返回合法 JSON，本次分析的纠错额度已用完，未应用结果。');
+      jsonRepairUsed = true;
+      metrics.jsonRepairs += 1;
+      runContext.requestKind = 'jsonRepair';
       const content = data?.choices?.[0]?.message?.content || '';
-      let parsed = extractJson(content);
-      if (parsed && typeof parsed === 'object') return parsed;
 
-      // 同一轮全局尝试内：先做一次「请只输出 JSON」纠错请求
+      // 一次 API 调用共享一次语法纠错；传输错误的全局重试不重置额度。
       const retryBody = {
-        model,
+        ...body,
         temperature: 0.1,
-        ...stPresetSampling,
         messages: [
           ...effectiveMessages,
           { role: 'assistant', content: String(content || '') },
           { role: 'user', content: buildJsonRetryInstruction() },
         ],
-        ...(useFormattedOutputV4 ? { response_format: { type: 'json_object' } } : {}),
       };
       const retryData = await requestChatCompletion(apiBase, settings, retryBody, runContext);
-      const retryContent = retryData?.choices?.[0]?.message?.content || '';
-      parsed = extractJson(retryContent);
-      if (parsed && typeof parsed === 'object') return parsed;
-
-      throw new Error(
-        `模型没有返回可解析的 JSON（全局尝试 ${globalAttempt + 1}/${GLOBAL_API_MAX_RETRIES + 1}）。原始回覆：${summarizeModelText(retryContent || content)}`,
-      );
-    }, { label: callLabel, overallSignal: overallController?.signal || null, deadlineMs });
+      parsed = parseModelObject(retryData);
+      if (parsed) return parsed;
+      throw apiError('BS_MODEL_JSON', '模型纠错后仍未返回合法 JSON，已停止本次分析，未应用结果。');
+    }, { label: callLabel, overallSignal: overallController?.signal || null, deadlineMs, metrics });
+  } catch (error) {
+    metrics.errorCode = error?.code || (isApiDeadlineError(error) ? 'deadline' : isApiTimeoutError(error) ? 'timeout' : 'network');
+    throw error;
   } finally {
+    metrics.durationMs = Date.now() - startedAt;
     if (overallTimer) clearTimeout(overallTimer);
   }
 }

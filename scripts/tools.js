@@ -5131,14 +5131,65 @@ function updateLaborPain(profile, stage, phase, progress = 0, obstruction = fals
   return pregnant.laborPain;
 }
 
-function processLabor(profile, tick, female) {
+function processLabor(profile, tick, female, newbornAges) {
+  const initialStage = profile.base?.stage;
+  let remainingHours = tick.deltaDays * 24;
+  if (!Number.isFinite(remainingHours) || remainingHours <= 0) return false;
+  // Keep a single lazy stall sample per tool call. Splitting phases must not
+  // give a blocked labor extra chances to pass within the same elapsed time.
+  let stallRoll;
+  const getStallRoll = () => (stallRoll ??= Math.random());
+  while (remainingHours > 1e-9 && (profile.base.stage === '产兆前驱' || LABOR_STAGES.includes(profile.base.stage))) {
+    const pregnant = profile.pregnant || {};
+    const previousFetusCount = pregnant.fetuses?.length || 0;
+    const before = [profile.base.stage, pregnant.laborPhase, pregnant.laborFetusIndex, pregnant.fetuses?.length].join(':');
+    const previousChildCount = profile.children?.length || 0;
+    const consumed = consumeLaborPhase(profile, { ...tick, deltaDays: remainingHours / 24, deltaMinutes: remainingHours * 60 }, female, getStallRoll);
+    remainingHours = Math.max(0, remainingHours - consumed);
+    // Children are only appended until transferProviderChildren runs after
+    // every character has advanced. Their local indexes stay stable here.
+    for (let index = previousChildCount; index < (profile.children?.length || 0); index++) {
+      newbornAges.set(index, remainingHours / 24 / 365);
+    }
+    if (pregnant.fetuses?.length > 0 && pregnant.fetuses.length !== previousFetusCount) {
+      applyPregnancyPhysiology(profile, profile.__runtimeRef || {});
+      updateFetalEnergyDrain(profile);
+    }
+    const after = [profile.base.stage, pregnant.laborPhase, pregnant.laborFetusIndex, pregnant.fetuses?.length].join(':');
+    // A partial or stalled phase consumed the whole remaining interval.
+    // Zero-time transitions are safe because they change this state key.
+    if (before === after) break;
+  }
+  if (remainingHours > 0 && profile.base.stage === '产后恢复') {
+    const recoveryDays = getStageLimit(profile, '产后恢复');
+    const days = (Number(profile.base.days) || 0) + remainingHours / 24;
+    if (days >= recoveryDays) {
+      const advanced = advanceMenstrualStage(profile, '卵泡期', days - recoveryDays);
+      profile.base.stage = advanced.stage;
+      profile.base.days = advanced.days;
+    } else profile.base.days = days;
+  } else if (remainingHours > 0 && profile.gestationLock && PREGNANCY_STAGES.includes(profile.base.stage)) {
+    // A lock starts another pregnancy, rather than another labor event.
+    // Preserve its elapsed time without inventing additional deliveries.
+    const pregnant = profile.pregnant;
+    pregnant.pregnantDays += remainingHours / 24;
+    pregnant.effectivePregnantDays += remainingHours / 24 * clampNumber(getGestationEffectiveSpeed(profile), 0, 20, 1);
+    const derived = derivePregnancyStageState(pregnant.effectivePregnantDays, 1);
+    profile.base.stage = derived.stage;
+    profile.base.days = derived.days;
+  }
+  return profile.base.stage !== initialStage;
+}
+
+function consumeLaborPhase(profile, tick, female, getStallRoll) {
   const base = profile.base || {};
   const pregnant = profile.pregnant || {};
   const notify = profile.notify || {};
   const realisticLabor = Boolean(profile?.immune?.realisticLabor);
   const stage = String(base.stage || '');
   const rawHours = tick.deltaDays * 24;
-  if (rawHours <= 0) return false;
+  let consumedHours = 0;
+  if (!Number.isFinite(rawHours) || rawHours <= 0) return consumedHours;
 
   const pressureCap = getUterinePressureCap(profile);
   const currentPressure = clampNumber(base.uterinePressure, 0, pressureCap, 0);
@@ -5150,18 +5201,26 @@ function processLabor(profile, tick, female) {
   const libidoRange = Math.max(1, libidoLines.hard - libidoLines.floor);
   const libidoExcess = clampNumber((libido - libidoLines.floor) / libidoRange, 0, 1, 0);
   const libidoMultiplier = 1 + (libidoExcess * 0.25);
-  const baseEffectiveHours = rawHours * libidoMultiplier;
   let currentStageHours = clampNumber(pregnant.laborHours, 0, 9999, 0);
   let currentEffectiveHours = clampNumber(pregnant.effectiveLaborHours, 0, 9999, 0);
 
   if (stage === '产兆前驱') {
-    updateProdromalFetalPositions(profile, tick);
     const initialHours = getProdromalInitialHours(profile);
     // 倒计时按她的状态慢下来：耗竭或情压过阈时宫缩排不动钟点，产程照走只是更慢。
-    const remainingHours = clampNumber(pregnant.prodromalRemainingHours, 0, 9999, initialHours) - (rawHours * getVitalityPressureMultiplier(profile));
+    const rate = getVitalityPressureMultiplier(profile);
+    const beforeRemaining = clampNumber(pregnant.prodromalRemainingHours, 0, 9999, initialHours);
+    consumedHours = Math.min(rawHours, beforeRemaining / rate);
+    const remainingHours = beforeRemaining - consumedHours * rate;
+    const hourCarry = ((Number(tick.nextRuntime?.hourCarryMinutes) || 0) - tick.deltaMinutes % 60 + 60) % 60;
+    updateProdromalFetalPositions(profile, { ...tick, passedHours: Math.floor((hourCarry + consumedHours * 60 + 1e-9) / 60) });
+    const oldPregnantDays = clampNumber(pregnant.pregnantDays, 0, 9999, 0);
+    pregnant.pregnantDays = oldPregnantDays + consumedHours / 24;
+    pregnant.effectivePregnantDays = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0)
+      + consumedHours / 24 * clampNumber(getGestationEffectiveSpeed(profile), 0, 20, 1);
+    if (base.isHere !== false && Math.floor(pregnant.pregnantDays / 7) > Math.floor(oldPregnantDays / 7)) applyWeeklyNutrition(profile);
     pregnant.prodromalRemainingHours = Math.max(0, remainingHours);
     updateLaborPain(profile, stage, null, 1 - (Math.max(0, remainingHours) / initialHours));
-    if (remainingHours <= 0) {
+    if (remainingHours <= 1e-9) {
       base.stage = '第一产程';
       base.days = 0;
       beginLaborPhase(pregnant, '潜伏期', 0);
@@ -5172,14 +5231,14 @@ function processLabor(profile, tick, female) {
         firstly: `${female}进入了第一产程`,
         secondly: `${female}的产兆前驱结束，宫缩进一步加剧，正式进入分娩`,
       };
-      return true;
+      return consumedHours;
     }
     notify.secondly = `${female}仍处于产兆前驱，距离正式产程约剩${Math.ceil(remainingHours)}小时`;
     profile.notify = notify;
-    return false;
+    return consumedHours;
   }
 
-  if (!LABOR_STAGES.includes(stage)) return false;
+  if (!LABOR_STAGES.includes(stage)) return consumedHours;
 
   const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
   const phase = getLaborPhaseForStage(stage, String(pregnant.laborPhase || ''));
@@ -5195,20 +5254,19 @@ function processLabor(profile, tick, female) {
   const stallThreshold = pressureCap * 0.66;
   const isThirdStageWithNoFetuses = stage === '第三产程' && fetuses.length === 0;
 
-  currentStageHours += rawHours;
-  pregnant.laborHours = currentStageHours;
-
   if (currentPressure < stallThreshold && !isThirdStageWithNoFetuses) {
     const currentRatio = pressureCap > 0 ? (currentPressure / pressureCap) : 0;
     const chanceToStall = Math.max(0, Math.min(1, 1 - currentRatio));
-    if (Math.random() < chanceToStall) {
+    if (getStallRoll() < chanceToStall) {
+      consumedHours = rawHours;
+      pregnant.laborHours = currentStageHours + consumedHours;
       profile.notify = {
         ...notify,
         secondly: `${female}的子宫收缩微弱，产程进展停滞`,
       };
       pregnant.effectiveLaborHours = currentEffectiveHours;
       updateLaborPain(profile, stage, phase, currentEffectiveHours / threshold, Boolean(realisticObstruction));
-      return false;
+      return consumedHours;
     }
   } else if (currentPressure >= pressureCap && !realisticLabor) {
     if (stage === '第一产程') {
@@ -5223,7 +5281,7 @@ function processLabor(profile, tick, female) {
         firstly: `${female}进入了第二产程`,
         secondly: `${female}宫口开全，产程突然加速`,
       };
-      return true;
+      return consumedHours;
     }
 
     if (stage === '第二产程') {
@@ -5258,12 +5316,13 @@ function processLabor(profile, tick, female) {
           secondly: `${female}产程突然加速，生下了${father}的孩子，性别为${gender}，仍有${fetuses.length}胎待产`,
         };
       }
-      return base.stage !== stage;
+      return consumedHours;
     }
 
     if (stage === '第三产程') {
       applyLaborAmnionWear(profile, female, { forceRupture: true, silent: true });
-      return applyChildbirthInternal(profile, female, true);
+      applyChildbirthInternal(profile, female, true);
+      return consumedHours;
     }
   }
 
@@ -5273,19 +5332,22 @@ function processLabor(profile, tick, female) {
   // 她那边跟不上了，宫缩就慢下来：体力耗竭与情压过阈各打七折、叠乘不归零——
   // 第三产程除外（那一程靠她自己的力量已经不多，且孩子必须出来）。
   const vitalityDrag = stage === '第三产程' ? 1 : getVitalityPressureMultiplier(profile);
-  const effectiveHoursGain = baseEffectiveHours * pressureMultiplier * vitalityDrag;
-  currentEffectiveHours += effectiveHoursGain;
+  const rate = libidoMultiplier * pressureMultiplier * vitalityDrag;
+  const blocked = realisticObstruction && phase === '胎体娩出';
+  consumedHours = blocked ? rawHours : Math.min(rawHours, Math.max(0, threshold - currentEffectiveHours) / rate);
+  pregnant.laborHours = currentStageHours + consumedHours;
+  currentEffectiveHours = Math.min(threshold, currentEffectiveHours + consumedHours * rate);
   pregnant.effectiveLaborHours = currentEffectiveHours;
   updateLaborPain(profile, stage, phase, currentEffectiveHours / threshold, Boolean(realisticObstruction));
 
-  if (stage === '第一产程') {
-    applyLaborAmnionWear(profile, female, { multiplier: rawHours * 0.35 });
-  } else if (stage === '第二产程') {
-    applyLaborAmnionWear(profile, female, { multiplier: rawHours * 0.75 });
+  if (stage === '第一产程' && consumedHours > 0) {
+    applyLaborAmnionWear(profile, female, { multiplier: consumedHours * 0.35 });
+  } else if (stage === '第二产程' && consumedHours > 0) {
+    applyLaborAmnionWear(profile, female, { multiplier: consumedHours * 0.75 });
   } else if (stage === '第三产程') {
     applyLaborAmnionWear(profile, female, { forceRupture: true, silent: true });
   }
-  if (pregnant.effectiveLaborHours <= threshold) {
+  if (pregnant.effectiveLaborHours < threshold - 1e-9) {
     if (stage === '第二产程' && realisticObstruction && phase === '胎体娩出') {
       notify.secondly = `${female}因${realisticObstruction}无法自然娩出胎儿，产程持续受阻`;
     } else if (stage === '第二产程' && fetuses.length > 0) {
@@ -5306,7 +5368,7 @@ function processLabor(profile, tick, female) {
       }
     }
     profile.notify = notify;
-    return false;
+    return consumedHours;
   }
 
   if (stage === '第一产程') {
@@ -5314,20 +5376,20 @@ function processLabor(profile, tick, female) {
       beginLaborPhase(pregnant, '活跃期', 0);
       updateLaborPain(profile, stage, '活跃期', 0);
       profile.notify = { ...notify, firstly: `${female}进入了第一产程·活跃期`, secondly: `${female}的规律宫缩明显加强` };
-      return false;
+      return consumedHours;
     }
     if (phase === '活跃期') {
       beginLaborPhase(pregnant, '过渡期', 0);
       updateLaborPain(profile, stage, '过渡期', 0);
       profile.notify = { ...notify, firstly: `${female}进入了第一产程·过渡期`, secondly: `${female}的分娩疼痛与压迫感进一步攀升` };
-      return false;
+      return consumedHours;
     }
     base.stage = '第二产程';
     base.days = 0;
     beginLaborPhase(pregnant, '胎体下降', 1);
     updateLaborPain(profile, '第二产程', '胎体下降', 0);
     profile.notify = { ...notify, firstly: `${female}进入了第二产程·第1胎体下降`, secondly: `${female}开始推动胎儿下降` };
-    return true;
+    return consumedHours;
   }
 
   if (stage === '第二产程') {
@@ -5337,7 +5399,7 @@ function processLabor(profile, tick, female) {
         ...notify,
         secondly: `${female}因${realisticObstruction}无法自然娩出胎儿`,
       };
-      return false;
+      return consumedHours;
     }
     if (phase === '胎体下降') {
       beginLaborPhase(pregnant, '胎体娩出', pregnant.laborFetusIndex);
@@ -5347,7 +5409,7 @@ function processLabor(profile, tick, female) {
         firstly: `${female}进入了第二产程·第${pregnant.laborFetusIndex}胎体娩出`,
         secondly: `${female}的第${pregnant.laborFetusIndex}胎开始娩出`,
       };
-      return false;
+      return consumedHours;
     }
     if (phase === '间歇期') {
       const nextIndex = clampNumber(pregnant.laborFetusIndex, 1, 99, 1) + 1;
@@ -5358,7 +5420,7 @@ function processLabor(profile, tick, female) {
         firstly: `${female}进入了第二产程·第${nextIndex}胎体下降`,
         secondly: `${female}开始推动下一胎下降`,
       };
-      return false;
+      return consumedHours;
     }
     if (fetuses.length > 0) {
       const baby = fetuses.shift();
@@ -5387,13 +5449,13 @@ function processLabor(profile, tick, female) {
           secondly: `${female}生下了${father}的孩子，性别为${gender}，仍有${fetuses.length}胎待产`,
         };
       }
-      return base.stage !== stage;
+      return consumedHours;
     }
     base.stage = '第三产程';
     base.days = 0;
     beginLaborPhase(pregnant, '供养器官娩出', 0);
     updateLaborPain(profile, '第三产程', '供养器官娩出', 0);
-    return true;
+    return consumedHours;
   }
 
   if (stage === '第三产程') {
@@ -5405,12 +5467,13 @@ function processLabor(profile, tick, female) {
         firstly: `${female}进入了第三产程·产后观察`,
         secondly: `${female}的供养器官已娩出，开始观察产后状态`,
       };
-      return false;
+      return consumedHours;
     }
-    return applyChildbirthInternal(profile, female, true);
+    applyChildbirthInternal(profile, female, true);
+    return consumedHours;
   }
 
-  return false;
+  return consumedHours;
 }
 
 function applyAbortion(chatState, args) {
@@ -6118,6 +6181,7 @@ function applyTimeToCharacter(character, tick) {
   const oldStage = stage;
 
   if (deltaDays <= 0) return { character: next, stageChanged: false, oldStage, newStage: stage };
+  const newbornAges = new Map();
 
   processSimpleConception(profile, tick, notify, next.name);
   stage = String(base.stage || stage);
@@ -6189,9 +6253,10 @@ function applyTimeToCharacter(character, tick) {
   } else if (stage === '产后恢复') {
     days += deltaDays;
     const recoveryDays = getStageLimit(profile, '产后恢复');
-    if (days > recoveryDays) {
-      stage = '卵泡期';
-      days = 0;
+    if (days >= recoveryDays) {
+      const advanced = advanceMenstrualStage(profile, '卵泡期', days - recoveryDays);
+      stage = advanced.stage;
+      days = advanced.days;
       stageChanged = true;
       enteredFollicular = true;
       pregnant.pregnantDays = 0;
@@ -6217,26 +6282,12 @@ function applyTimeToCharacter(character, tick) {
       pregnant.pregnantDays = 0;
       pregnant.effectivePregnantDays = 0;
     }
-  } else if (stage === '产兆前驱') {
-    const oldPregnantDays = clampNumber(pregnant.pregnantDays, 0, 9999, 0);
-    pregnant.pregnantDays = oldPregnantDays + deltaDays;
-    pregnant.effectivePregnantDays = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0) + (deltaDays * clampNumber(getGestationEffectiveSpeed({ ...profile, bio }), 0, 20, 1));
-    const oldWeek = Math.floor(oldPregnantDays / 7);
-    const newWeek = Math.floor(pregnant.pregnantDays / 7);
-    if (newWeek > oldWeek && isHere) {
-      applyWeeklyNutrition(profile);
-    }
+  } else if (stage === '产兆前驱' || LABOR_STAGES.includes(stage)) {
     if (isHere) applyHourlyPregnancyMetabolism(profile, tick, next.name);
     updateDerivedTypeProgress(profile, tick);
-    const laborChanged = processLabor(profile, tick, next.name);
+    const laborChanged = processLabor(profile, tick, next.name, newbornAges);
     stage = String(base.stage || stage);
-    days = clampNumber(base.days, 0, 9999, 0);
-    stageChanged = stageChanged || laborChanged || stage !== oldStage;
-  } else if (LABOR_STAGES.includes(stage)) {
-    if (isHere) applyHourlyPregnancyMetabolism(profile, tick, next.name);
-    updateDerivedTypeProgress(profile, tick);
-    const laborChanged = processLabor(profile, tick, next.name);
-    stage = String(base.stage || stage);
+    enteredFollicular = MENSTRUAL_STAGES.includes(stage);
     days = clampNumber(base.days, 0, 9999, 0);
     stageChanged = stageChanged || laborChanged || stage !== oldStage;
   } else if (stage === '无经期' || stage === '未激活') {
@@ -6276,9 +6327,10 @@ function applyTimeToCharacter(character, tick) {
 
   base.age = clampNumber(base.age, 0, 99999, 15) + (deltaDays / 365);
   if (Array.isArray(profile.children) && profile.children.length > 0) {
-    profile.children = profile.children.map((child) => ({
+    profile.children = profile.children.map((child, index) => ({
       ...child,
-      age: child?.age === null || child?.age === undefined ? child?.age : clampNumber(child.age, 0, 99999, 0) + (deltaDays / 365),
+      age: newbornAges.has(index) ? newbornAges.get(index)
+        : (child?.age === null || child?.age === undefined ? child?.age : clampNumber(child.age, 0, 99999, 0) + (deltaDays / 365)),
     }));
   }
 
@@ -6325,6 +6377,7 @@ function applyTimeToCharacter(character, tick) {
     maternalFetalInteractionUsed: tick.passedHours > 0 ? false : Boolean(cooldown.maternalFetalInteractionUsed),
   };
   updateAdvisoryNotify(profile, next.name);
+  if (newbornAges.size > 0) appendNotifyReminder(profile.notify, `${next.name}本轮生下了${newbornAges.size}个孩子`);
   if (tick.passedDays > 0) {
     appendNotifyReminder(profile.notify || notify, '已跨入新的一天；若角色有值得沉淀的经历、心境、关系或身体变化，可调用 bsWriteDiary 写入主观日记');
   }
@@ -6389,7 +6442,7 @@ function applyPassedTime(chatState, args) {
     chatState.characters[name] = result.character;
   }
   transferProviderChildren(chatState);
-  const elapsedMinutes = Math.round(totalMinutes);
+  const elapsedMinutes = totalMinutes;
   const previousMinutes = Math.max(0, Number(chatState.minutesPassed) || 0);
   chatState.minutesPassed = previousMinutes + elapsedMinutes;
   // 记下这一轮实际推了多久，给性欲的刺激分钟当上限用：

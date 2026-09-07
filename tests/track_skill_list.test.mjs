@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { buildTrackerSystemPrompt } from '../scripts/tracker_prompt_context.js';
 
 const [controller, css] = await Promise.all([
   readFile(new URL('../index.js', import.meta.url), 'utf8'),
@@ -113,7 +114,7 @@ test('numerals are auto-fitted to the tile after render', () => {
 test('talent range is narrowed to +/-5 everywhere', async () => {
   const skillConfig = await readFile(new URL('../scripts/skill_config.js', import.meta.url), 'utf8');
   const registry = await readFile(new URL('../scripts/registry.js', import.meta.url), 'utf8');
-  const trackerPrompt = await readFile(new URL('../scripts/tracker_prompt_context.js', import.meta.url), 'utf8');
+  const trackerPrompt = buildTrackerSystemPrompt();
 
   assert.match(skillConfig, /export const TALENT_MAX_LEVEL = 5;/);
   // 技能仍是 10 级，只收窄天赋
