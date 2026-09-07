@@ -63,6 +63,8 @@ import {
   getGestationModifierMultiplier,
   getChatState,
   getPsyStressInitByLevel,
+  getPsyStressBaseline,
+  PSY_STRESS_RECOVERY_PER_HOUR,
   getSettings,
   getVitalityInitByLevel,
   saveSettings,
@@ -261,7 +263,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsUpdateCharacterStatus',
-    description: '对单一角色的体力、情压、性欲、宫压做增减更新。会联动代谢累积、高潮排卵、羊膜耐久警告等状态。urine 与 stool 是剧情刺激带来的尿意／便意增量：只按事件量级给一个小整数（轻 5／中 10／强 20），不必自行折算孕期倍率与容量——系统会按当前阶段、入盆状态与所处档位加权。urine 的刺激来源如喝水、受寒、紧张、久坐、被压被顶、性交、咳嗽打喷嚏；stool 的刺激来源如进食后（最重）、晨起、温热饮水。urineHolding 表示她此刻去不了厕所——被场合、他人、束缚或手头脱不开的事困住，附近没有可用的地方，或她自己不肯去。置 true 后系统才会让尿意持续往上爬并可能漏尿或失禁；能去时置 false，系统会按常规趟数自行处理，不必逐趟调用 bsExcreteMetabolism。默认为 false。'
+    description: '对单一角色的体力、情压、性欲、宫压做增减更新。会联动代谢累积、高潮排卵、羊膜耐久警告等状态。urine 与 stool 是剧情刺激带来的尿意／便意增量：只按事件量级给一个小整数（轻 5／中 10／强 20），不必自行折算孕期倍率与容量——系统会按当前阶段、入盆状态与所处档位加权。psyStress 情压是慢变量，同样只按事件量级给小整数：轻 3~5（被说了一句、小尴尬、小紧张）／中 8~12（争吵、惊吓、当众羞辱）／强 15~20（重大打击、创伤事件），单次不超过 30（超出系统会截断）；日常闲聊里的小情绪波动不报，一轮只报一次。平复也走这里：被安抚 -5~10、痛哭发泄后 -10、重大释怀 -15~20。事件压力会随时间自动回落到她的本性水平（约 2 点/小时），不必每轮手动报减——只在正文明确写了平复情节时报负数。urine 的刺激来源如喝水、受寒、紧张、久坐、被压被顶、性交、咳嗽打喷嚏；stool 的刺激来源如进食后（最重）、晨起、温热饮水。urineHolding 表示她此刻去不了厕所——被场合、他人、束缚或手头脱不开的事困住，附近没有可用的地方，或她自己不肯去。置 true 后系统才会让尿意持续往上爬并可能漏尿或失禁；能去时置 false，系统会按常规趟数自行处理，不必逐趟调用 bsExcreteMetabolism。默认为 false。'
       + '体力是存量资源条：读数是余量，不是此刻状态——同一个 40%，躺着没事、爬楼就现形。只在睡觉与进食时回复（bsExcreteMetabolism 排解困意／饿意），做事只扣不加。'
       + '活动消耗只报两样：vitalityClass 是这一回合哪一档活动（1 轻——能边做边正常聊天，慢走、家务、做饭、洗澡、逛街、坐着上课／2 中——会喘但能持续，说不了长句，快走、爬楼、拎重购物袋、久站排队、普通性交、跳舞／3 重——一分钟就喘、顾不上别的、做不满半小时，跑、搬家具、激烈挣扎、剧烈性交、全力用力、惊慌逃窜），'
       + 'vitalityMinutes 是这一档持续了几分钟。静坐、躺着、被抱着不报——底噪系统自己扣。体力见底会晕倒，授权与时长系统自算并写进 notify，不要自行判定她晕不晕。'
@@ -292,7 +294,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
             libidoClass: { type: 'integer', minimum: 0, maximum: 5 },
             libidoMinutes: { type: 'integer', minimum: 0, maximum: 1440 },
             uterinePressure: { type: 'integer' },
-            psyStress: { type: 'integer' },
+            psyStress: { type: 'integer', minimum: -30, maximum: 30 },
             urine: { type: 'integer' },
             stool: { type: 'integer' },
             urineHolding: { type: 'boolean' },
@@ -2083,6 +2085,27 @@ function applyVitalityTick(profile, tick) {
   }
 
   base.vitality = clampNumber(value - drain, 0, cap, value);
+}
+
+// 情压随时间回归本性基线（与宫压回落同构）：事件加的压力散掉、深度平静回归。
+// 基线 = getPsyStressBaseline(level)，即等级初始值——等级是特质不是暂时状态，
+// 基线只随等级变。双向收敛：一次 +30 的争吵约 15 小时落回（2/小时），
+// 刚被安慰压到基线之下也慢慢回到本性水平（情绪回归均值）。
+// 模型报的负增量（安慰事件）照常走 bsUpdateCharacterStatus——这条回落是兜底，
+// 保证正文一句不提时值也不会永久卡死在高位（旧版只有模型主动报减一条路）。
+// 不受 immune.metabolism 门控：那道门管的是排泄需求七项，情压是心理量。
+function applyPsyStressRecovery(profile, tick) {
+  const hours = Math.max(0, Number(tick?.passedHours) || 0);
+  if (hours <= 0) return;
+  const base = profile.base || {};
+  const baseline = getPsyStressBaseline(base.psyStressLevel);
+  const current = clampNumber(base.psyStress, 0, 9999, baseline);
+  if (current === baseline) return;
+  const step = PSY_STRESS_RECOVERY_PER_HOUR * hours;
+  base.psyStress = current > baseline
+    ? Math.max(baseline, current - step)
+    : Math.min(baseline, current + step);
+  profile.base = base;
 }
 
 // 睡觉回复：排解困意的每一点回体力。困意高打折（没睡够，歇也歇不回来）。
@@ -6324,6 +6347,8 @@ function applyTimeToCharacter(character, tick) {
   applyWeeklyMetabolismRoutine(profile, tick, { enteredFollicular, stage });
   // 体力逐轮结算：底噪＋产程速率都是时间的函数，跟代谢同一时机吃 tick。
   applyVitalityTick(profile, tick);
+  // 情压回归本性基线。不限 isHere——离场的日子情绪同样平复（离开压力源甚至更快）。
+  applyPsyStressRecovery(profile, tick);
 
   base.age = clampNumber(base.age, 0, 99999, 15) + (deltaDays / 365);
   if (Array.isArray(profile.children) && profile.children.length > 0) {
@@ -6470,7 +6495,12 @@ function applyCharacterStatus(chatState, args) {
     // （工具调回复、剧本抢救），但它刷不出任何代谢副产品。
     base.vitality = clampNumber((base.vitality || 0) + Number(options.vitality || 0), 0, vitalityCap, base.vitality || 0);
   }
-  if (options.psyStress !== undefined) base.psyStress = clampNumber((base.psyStress || 0) + Number(options.psyStress || 0), 0, stressCap, base.psyStress || 0);
+  if (options.psyStress !== undefined) {
+    // 单次增量硬钳 ±30（schema 同款）：情压是慢变量，一轮对话再激烈也只是
+    // 一次事件；不钳的话模型随手 +50，两三轮顶满，回落 2/小时根本追不上。
+    const capped = clampNumber(Number(options.psyStress) || 0, -30, 30, 0);
+    base.psyStress = clampNumber((base.psyStress || 0) + capped, 0, stressCap, base.psyStress || 0);
+  }
   // 体力活动档：与性欲同一手法的接口——模型报「哪一档活动 + 几分钟」，
   // 倍率（经期／低体力／入盆）与晕倒授权全由引擎算，模型只判档。
   // 分钟同样拿本轮真实时长掐——虚报分钟不会刷出超额消耗以外的任何东西。

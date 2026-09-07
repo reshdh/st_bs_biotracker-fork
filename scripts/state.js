@@ -502,6 +502,17 @@ export function getPsyStressInitByLevel(level) {
   return Math.floor((PSY_STRESS_CAPS[clampLevel(level)] || PSY_STRESS_CAPS[4]) / 2);
 }
 
+// 情压基线 = 等级初始值（本性水平）。事件加的压力是暂时高出基线的部分，随时间回落；
+// 被深度安慰压到基线之下的平静也回归基线（情绪回归均值）。等级变，基线跟着变。
+export function getPsyStressBaseline(level) {
+  return getPsyStressInitByLevel(level);
+}
+
+// 情压回落速率（点/小时）。一场 +30 的大事件约 15 小时消化，过夜基本平复；
+// 比宫压（8/小时）慢——情绪散得比宫缩慢，但不该永久挂在高位（旧版只有模型
+// 主动报减一条路，只加不减的档会永远触发假孕检定与体力软顶压制）。
+export const PSY_STRESS_RECOVERY_PER_HOUR = 2;
+
 function randomInt(min, max) {
   const nextMin = Math.ceil(min);
   const nextMax = Math.floor(max);
