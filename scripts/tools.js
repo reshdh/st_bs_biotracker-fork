@@ -2058,10 +2058,18 @@ function applyVitalityTick(profile, tick) {
     return;
   }
 
-  let drain = VITALITY_IDLE_DRAIN_PER_HOUR * (minutes / 60);
-
-  // 产程：速率由阶段给，模型不用报档。
+  // 产程：速率由阶段给，模型不用报档。跨天也全额扣——她在分娩，不是过日子。
   const laborRate = LABOR_VITALITY_PER_HOUR[stage];
+  let drainMinutes = minutes;
+  if (laborRate === undefined) {
+    // 非产程的整天部分交给日结算（applyNaturalMetabolismRecovery 落软顶），
+    // 底噪只扣余数小时——否则 3 天离场推进先落软顶又被 72h×1.2 扣穿，
+    // 等于「离场=连续硬撑三天」，跟尿意那套「离场日子默认她去过厕所」打架。
+    // carry 场景（整天由前几轮攒出）余数为负时取 0：carry 部分在前几轮已扣过。
+    const passedDays = Math.max(0, Number(tick?.passedDays) || 0);
+    drainMinutes = Math.max(0, minutes - passedDays * 24 * 60);
+  }
+  let drain = VITALITY_IDLE_DRAIN_PER_HOUR * (drainMinutes / 60);
   if (laborRate !== undefined) {
     drain += laborRate * (minutes / 60);
   }
@@ -4129,6 +4137,25 @@ function applyNaturalMetabolismRecovery(profile, tick) {
   metabolism.sleep = isMetabolismExempt(profile, 'sleep') ? 0 : Math.max(0, clampNumber(metabolism.sleep, 0, getMetabolismCap(profile, 'sleep'), 0) - daySleepRecovery);
   applyDerivedMetabolismExemptions(profile);
   profile.metabolism = metabolism;
+
+  // 体力日结算：跨天 = 离场默认作息。上面已经按天回落困意饿意（她睡了觉、吃了饭），
+  // 睡觉吃饭的体力回报也要跟上——恢复只在模型显式报 bsExcreteMetabolism 时结算，
+  // UI 快进/模型报跨天时不走那条路，体力就只剩底噪扣（旧版 3 天扣 86 点直接穿底）。
+  // 结算口径：整天部分定格为「充分作息」终态——体力落软顶（软顶已含孕周/情压压制，
+  // 产后按 recoveryDays 爬回），软顶永不砸当前值；余数小时由 applyVitalityTick
+  // 照常扣底噪。产程段例外：她在分娩不是过日子，体力交给产程速率全程消耗。
+  {
+    const base = profile.base || {};
+    const stage = String(base.stage || '');
+    if (LABOR_VITALITY_PER_HOUR[stage] === undefined) {
+      const softCap = getVitalitySoftCapOf(profile);
+      const current = clampNumber(base.vitality, 0, getVitalityCapOf(profile), base.vitality ?? 0);
+      if (softCap > 0 && current < softCap) {
+        base.vitality = softCap;
+        profile.base = base;
+      }
+    }
+  }
 }
 
 function applyWeeklyMetabolismRoutine(profile, tick, options = {}) {
