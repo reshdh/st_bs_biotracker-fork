@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createEmptyChatState, createDefaultFemaleState } from '../scripts/state.js';
 import { applyToolCall } from '../scripts/tools.js';
-import { VITALITY_IDLE_DRAIN_PER_HOUR, LABOR_VITALITY_PER_HOUR } from '../scripts/vitality_config.js';
+import { VITALITY_IDLE_DRAIN_PER_HOUR, LABOR_VITALITY_PER_HOUR,
+  VITALITY_ACTIVITY_PER_MIN, VITALITY_ENGAGED_MIN_MULT } from '../scripts/vitality_config.js';
 
 function setup(stage, vitality, extra = {}) {
   const chat = createEmptyChatState();
@@ -69,4 +70,29 @@ test('小时级推进（不足一天）不走日结算：底噪照常全额扣',
   const chat = setup('卵泡期', 100);
   applyToolCall(chat, { name: 'bsPassedTime', arguments: { hour: 10 } });
   near(vitality(chat), 100 - VITALITY_IDLE_DRAIN_PER_HOUR * 10, 0.01, '场景内时间不落软顶');
+});
+
+test('跨天推进后模型报总活动分钟：消耗叠加在充分作息终态之上', () => {
+  const chat = setup('卵泡期', 20);
+  // 模型按提示词顺序：先推时间，再报这 3 天的活动（赶路 3 天 ≈ 1440 分钟中档）
+  applyToolCall(chat, { name: 'bsPassedTime', arguments: { day: 3 } });
+  applyToolCall(chat, { name: 'bsUpdateCharacterStatus', arguments: {
+    female: 'Alice',
+    options: { vitalityClass: 2, vitalityMinutes: 1440 },
+  } });
+  // 档 2 中档每分钟 × engaged 底乘数（未孕入盆深度 0 → 1.05）
+  const drain = VITALITY_ACTIVITY_PER_MIN[2] * 1440 * VITALITY_ENGAGED_MIN_MULT;
+  near(vitality(chat), Math.max(0, 125 - drain), 0.5, '软顶 125 叠加 3 天赶路消耗');
+});
+
+test('活动报量仍受本轮真实推进时长钳制：没推时间时单段最多 10 小时', () => {
+  const chat = setup('卵泡期', 125);
+  // 本轮没有 bsPassedTime（lastAdvanceMinutes 0）→ 走 asked；函数内单段活动 600 分钟封顶
+  applyToolCall(chat, { name: 'bsUpdateCharacterStatus', arguments: {
+    female: 'Alice',
+    options: { vitalityClass: 2, vitalityMinutes: 99999 },
+  } });
+  // 单段 600 分钟 × 档 2 × engaged 底乘数 1.05（未孕）= 63 点
+  const drain = VITALITY_ACTIVITY_PER_MIN[2] * 600 * VITALITY_ENGAGED_MIN_MULT;
+  near(vitality(chat), Math.max(0, 125 - drain), 0.01, '单段活动 10h 封顶');
 });

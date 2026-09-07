@@ -266,7 +266,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
     description: '对单一角色的体力、情压、性欲、宫压做增减更新。会联动代谢累积、高潮排卵、羊膜耐久警告等状态。urine 与 stool 是剧情刺激带来的尿意／便意增量：只按事件量级给一个小整数（轻 5／中 10／强 20），不必自行折算孕期倍率与容量——系统会按当前阶段、入盆状态与所处档位加权。psyStress 情压是慢变量，同样只按事件量级给小整数：轻 3~5（被说了一句、小尴尬、小紧张）／中 8~12（争吵、惊吓、当众羞辱）／强 15~20（重大打击、创伤事件），单次不超过 30（超出系统会截断）；日常闲聊里的小情绪波动不报，一轮只报一次。平复也走这里：被安抚 -5~10、痛哭发泄后 -10、重大释怀 -15~20。事件压力会随时间自动回落到她的本性水平（约 2 点/小时），不必每轮手动报减——只在正文明确写了平复情节时报负数。urine 的刺激来源如喝水、受寒、紧张、久坐、被压被顶、性交、咳嗽打喷嚏；stool 的刺激来源如进食后（最重）、晨起、温热饮水。urineHolding 表示她此刻去不了厕所——被场合、他人、束缚或手头脱不开的事困住，附近没有可用的地方，或她自己不肯去。置 true 后系统才会让尿意持续往上爬并可能漏尿或失禁；能去时置 false，系统会按常规趟数自行处理，不必逐趟调用 bsExcreteMetabolism。默认为 false。'
       + '体力是存量资源条：读数是余量，不是此刻状态——同一个 40%，躺着没事、爬楼就现形。只在睡觉与进食时回复（bsExcreteMetabolism 排解困意／饿意），做事只扣不加。'
       + '活动消耗只报两样：vitalityClass 是这一回合哪一档活动（1 轻——能边做边正常聊天，慢走、家务、做饭、洗澡、逛街、坐着上课／2 中——会喘但能持续，说不了长句，快走、爬楼、拎重购物袋、久站排队、普通性交、跳舞／3 重——一分钟就喘、顾不上别的、做不满半小时，跑、搬家具、激烈挣扎、剧烈性交、全力用力、惊慌逃窜），'
-      + 'vitalityMinutes 是这一档持续了几分钟。静坐、躺着、被抱着不报——底噪系统自己扣。体力见底会晕倒，授权与时长系统自算并写进 notify，不要自行判定她晕不晕。'
+      + 'vitalityMinutes 是这一档持续了几分钟。静坐、躺着、被抱着不报——底噪系统自己扣。跨天推进（bsPassedTime 推了多天）时，若这段日子她有持续的正事（赶路、行军、劳作、逃亡），按总活动分钟报（不含睡眠，如赶路 3 天≈1440 分钟档 2），系统在充分作息的日结算之上叠加这份消耗；普通日常不报。体力见底会晕倒，授权与时长系统自算并写进 notify，不要自行判定她晕不晕。'
       + 'vitalitySugar 置 true 表示剧情里喂了糖水／巧克力／运动饮料这类快糖：即时小回体力，当日第 1／2／3 次各回不同量、第 4 次起无效——吊命的口子，不是无限续命。'
       + '性欲只报两样：libidoClass 是这一回合哪一档刺激（0 无／1 想象／2 环境，走路、坐着顶着、衣服箍着，没人动手／3 轻，隔着衣服或不是核心部位或直接碰但很轻很慢／4 中，隔一层薄的碰核心或直接碰、中等力度／5 重，直接碰核心而且用力或者快），'
       + 'libidoMinutes 是这一档持续了几分钟。不按器具分——手、口、道具、插入都在同一根梯子上，同一个东西用法不同落在不同档；她自己用玩具也算。'
@@ -288,7 +288,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
           properties: {
             vitality: { type: 'integer' },
             vitalityClass: { type: 'integer', minimum: 1, maximum: 3 },
-            vitalityMinutes: { type: 'integer', minimum: 0, maximum: 1440 },
+            vitalityMinutes: { type: 'integer', minimum: 0, maximum: 4320 },
             vitalitySugar: { type: 'boolean' },
             libido: { type: 'integer' },
             libidoClass: { type: 'integer', minimum: 0, maximum: 5 },
@@ -1991,7 +1991,9 @@ function applyVitalityActivity(profile, activityClass, minutes, female) {
   const runtime = getVitalityRuntime(profile);
   if (runtime.faintMinutes > 0) return { drained: 0, fainted: true };
   const cls = Math.max(1, Math.min(VITALITY_ACTIVITY_MAX_CLASS, Math.floor(Number(activityClass) || 0)));
-  const mins = Math.max(0, Math.min(600, Number(minutes) || 0));
+  // 场景内单段活动 10 小时封顶（人连续做一件事的上限）；跨天总活动量
+  //（赶路 8h×N 天）由调用方按本轮推进时长钳，这里放宽到 3 天醒着的总分钟。
+  const mins = Math.max(0, Math.min(4320, Number(minutes) || 0));
   if (mins <= 0) return { drained: 0 };
 
   const base = profile.base || {};
@@ -6533,9 +6535,14 @@ function applyCharacterStatus(chatState, args) {
   // 分钟同样拿本轮真实时长掐——虚报分钟不会刷出超额消耗以外的任何东西。
   if (options.vitalityClass !== undefined) {
     profile.base = base;
-    const turnMinutes = clampNumber(chatState?.lastAdvanceMinutes, 0, 1440, 0);
-    const asked = clampNumber(options.vitalityMinutes, 0, 1440, 0);
-    const activityMinutes = turnMinutes > 0 ? Math.min(asked, turnMinutes) : asked;
+    // 跨天活动的报量上限跟本轮真实推进时长走（不再钳 1440）：
+    // bsPassedTime 推了 3 天时，模型应报这 3 天的总活动分钟（赶路 8h×3=1440），
+    // 日常作息由日结算落软顶兜底，报了活动就在软顶上叠消耗。
+    // 本轮没推时间时钳回单段场景上限 600（10 小时）——普通一轮对话不该出现
+    // 跨天量级的活动报量，那只会是虚报。
+    const turnMinutes = Math.max(0, Number(chatState?.lastAdvanceMinutes) || 0);
+    const asked = clampNumber(options.vitalityMinutes, 0, 4320, 0);
+    const activityMinutes = turnMinutes > 0 ? Math.min(asked, turnMinutes) : Math.min(asked, 600);
     const activityResult = applyVitalityActivity(profile, Number(options.vitalityClass || 0), activityMinutes, female);
     // 晕倒出声走 notify（applyVitalityActivity 内部已写），消耗量不逐次打扰。
     if (activityResult?.fainted) {
