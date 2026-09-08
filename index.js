@@ -3576,6 +3576,18 @@ function renderTrackPregnancy(viewModel) {
     || String(gestationModifier.description || '').trim()
     || Math.abs(Number(gestationModifier.multiplier ?? 1) - 1) > 0.000001,
   );
+  // 受孕窗口：未孕时常驻显示——卵子数以前只喂给风险徽章，正文写双卵也无处可看。
+  // 受精未着床的胚胎在着床前仍留在 fetuses 里，计数即「已受精待着床」。
+  const preImplantationCount = (!data.showPregnantFields && Array.isArray(data.fetuses))
+    ? data.fetuses.length
+    : 0;
+  const fertilityWindowHtml = data.showPregnantFields ? '' : `<div class="bs-bt-track-section">
+      <div class="bs-bt-track-section-title">${renderTrackTitle('受孕窗口', fertilityBadge)}</div>
+      <div class="bs-bt-track-meta">
+        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">可受精卵子</span><span class="bs-bt-track-meta-value">${Number(data.eggs) > 0 ? `${Number(data.eggs)} 颗` : '无'}</span></div>
+        ${preImplantationCount > 0 ? `<div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">受精卵（未着床）</span><span class="bs-bt-track-meta-value">${preImplantationCount} 颗 · 受精第 ${formatOneBasedDay(data.fertilizationDays)} 天</span></div>` : ''}
+      </div>
+    </div>`;
   return `
     ${hasGestationModifier ? `<div class="bs-bt-track-section">
       <div class="bs-bt-track-section-title">妊娠变速效果</div>
@@ -3585,6 +3597,7 @@ function renderTrackPregnancy(viewModel) {
         <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">说明</span><span class="bs-bt-track-meta-value">${escapeHtml(gestationModifier.description || '无')}</span></div>
       </div>
     </div>` : ''}
+    ${fertilityWindowHtml}
     ${renderCardCarouselSection(
       '精液来源',
       data.sperms,

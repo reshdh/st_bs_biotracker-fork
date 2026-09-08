@@ -1811,7 +1811,11 @@ function processSimpleConception(profile, tick, notify, name) {
     let eggs = clampNumber(base.eggs, 0, 99, 0);
     const femaleDifficulty = clampNumber(profile?.bio?.impregnationDifficulty, 0.1, 100, 1.0);
 
-    while (eggs > 0 && availableSperms.length > 0) {
+    // 每颗卵各自独立掷骰：同一个受精窗口里多颗卵互不排队——
+    // 旧实现循环末尾无条件 break，一次 bsPassedTime 只结算一颗，多卵必单胎。
+    // 没掷中的卵不消耗，下次推进仍落在窗口内就继续掷。
+    let fertilizedCount = 0;
+    for (let eggIndex = 0; eggIndex < eggs && availableSperms.length > 0; eggIndex += 1) {
       const totalSperm = availableSperms.reduce((sum, item) => sum + clampNumber(item?.value, 0, 999999, 0), 0);
       let winner = null;
       for (const sperm of availableSperms) {
@@ -1832,11 +1836,13 @@ function processSimpleConception(profile, tick, notify, name) {
       if (winner) {
         pregnant.fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
         pregnant.fetuses.push(createSimpleFetus(profile, winner, stage));
-        notify.secondly = `${name}受精成功`;
-        eggs -= 1;
+        fertilizedCount += 1;
       }
-      break;
     }
+    if (fertilizedCount > 0) {
+      notify.secondly = fertilizedCount > 1 ? `${name}有 ${fertilizedCount} 颗卵子受精成功` : `${name}受精成功`;
+    }
+    eggs -= fertilizedCount;
     base.eggs = eggs;
   }
 
