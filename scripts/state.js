@@ -578,6 +578,30 @@ export function getGestationEffectiveSpeed(profile) {
   return 1;
 }
 
+/**
+ * 卵巢/排卵状态的一句话描述（只读派生，不落档）：面板「受孕窗口」与主流注入共用。
+ * 世界书 <私密信息> 的 🥚卵巢 槽是模型自由发挥的散文；这里给的是引擎真值的
+ * 固定措辞，让两边叙事有同一个事实来源——卵数嵌在句子里，不给裸数字。
+ */
+export function getOvaryStatusText(profile) {
+  const base = profile?.base || {};
+  const stage = String(base.stage || '');
+  const eggs = Math.max(0, Math.round(Number(base.eggs) || 0));
+  const fetuses = Array.isArray(profile?.pregnant?.fetuses) ? profile.pregnant.fetuses : [];
+  if (PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage)) return '妊娠中，卵巢暂停排卵';
+  if (eggs > 0) return `已排出 ${eggs} 颗成熟卵子，尚可受精`;
+  if (fetuses.length > 0) return '本周期排卵已完成';
+  switch (stage) {
+    case '卵泡期': return '卵泡发育中，本周期尚未排卵';
+    case '排卵期': return '排卵窗口临近，尚未排出卵子';
+    case '黄体期': return '本周期排卵窗口已关闭';
+    case '月经期': return '月经来潮，卵泡将随新周期重新发育';
+    case '假孕期': return '假孕状态，暂停排卵';
+    case '产后恢复': return '产后恢复中，排卵尚未重启';
+    default: return '';
+  }
+}
+
 export function syncCharacterStageFromProfile(characterState) {
   const next = characterState;
   const profile = next?.profile || {};

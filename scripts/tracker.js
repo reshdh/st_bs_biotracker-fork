@@ -16,6 +16,7 @@ import {
   getCharacterAdditionalWorldBookNames,
   getChatKey,
   getChatState,
+  getOvaryStatusText,
   getPriorityCharacterNames,
   getRegisteredTargetNames,
   getSettings,
@@ -554,9 +555,12 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
   const sendPregnantState = shouldSendPregnantState(base, pregnant);
 
   // vitality 内部按浮点累积（每轮 −0.x），对外只报整数——小数对模型没有叙事意义，只会引它报小数增量。
+  // ovaryStatusText 是只读派生描述，主流正文照它写卵巢/排卵，与面板「受孕窗口」同源。
+  const ovaryStatusText = getOvaryStatusText(profile);
   profile.base = {
     ...base,
     ...(Number.isFinite(Number(base.vitality)) ? { vitality: Math.round(Number(base.vitality)) } : {}),
+    ...(ovaryStatusText ? { ovaryStatusText } : {}),
     vitalityLevelText: getVitalityLevelText(base.vitalityLevel),
     psyStressLevelText: getPsyStressLevelText(base.psyStressLevel),
   };

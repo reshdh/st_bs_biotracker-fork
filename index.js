@@ -77,6 +77,7 @@ import {
   getGestationEffectiveSpeed,
   getGestationSpeciesSpeed,
   getChatKey,
+  getOvaryStatusText,
   getChatState,
   getContextSafe,
   getApiUrlForFormat,
@@ -3213,6 +3214,7 @@ function buildTrackCharacterViewModel(character) {
     },
     pregnancy: {
       eggs: Number(base.eggs) || 0,
+      ovaryStatusText: getOvaryStatusText(profile),
       fertilizationDays: Number(base.fertilizationDays) || 0,
       totalSperm,
       sperms: Array.isArray(base.sperms) ? base.sperms : [],
@@ -3578,14 +3580,15 @@ function renderTrackPregnancy(viewModel) {
   );
   // 受孕窗口：未孕时常驻显示——卵子数以前只喂给风险徽章，正文写双卵也无处可看。
   // 受精未着床的胚胎在着床前仍留在 fetuses 里，计数即「已受精待着床」。
+  // 卵巢行用引擎真值的固定措辞（getOvaryStatusText），卵数嵌在句子里不给裸数字。
   const preImplantationCount = (!data.showPregnantFields && Array.isArray(data.fetuses))
     ? data.fetuses.length
     : 0;
   const fertilityWindowHtml = data.showPregnantFields ? '' : `<div class="bs-bt-track-section">
       <div class="bs-bt-track-section-title">${renderTrackTitle('受孕窗口', fertilityBadge)}</div>
       <div class="bs-bt-track-meta">
-        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">可受精卵子</span><span class="bs-bt-track-meta-value">${Number(data.eggs) > 0 ? `${Number(data.eggs)} 颗` : '无'}</span></div>
-        ${preImplantationCount > 0 ? `<div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">受精卵（未着床）</span><span class="bs-bt-track-meta-value">${preImplantationCount} 颗 · 受精第 ${formatOneBasedDay(data.fertilizationDays)} 天</span></div>` : ''}
+        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">卵巢</span><span class="bs-bt-track-meta-value">${escapeHtml(data.ovaryStatusText || '—')}</span></div>
+        ${preImplantationCount > 0 ? `<div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">受精卵</span><span class="bs-bt-track-meta-value">${preImplantationCount} 颗正分裂游向子宫 · 受精第 ${formatOneBasedDay(data.fertilizationDays)} 天</span></div>` : ''}
       </div>
     </div>`;
   return `
