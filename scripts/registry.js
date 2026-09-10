@@ -796,7 +796,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '你只需要填写角色注册时真正需要声明的内容，不需要补充其他无关信息。',
     '不要扩写额外分类，不要发散到注册步骤之外的内容。',
     '你只需要填写以下声明内容：',
-    '1. 角色基础注册：base.age、base.race、base.vitalityLevel、base.psyStressLevel、metabolism.libido、base.uterinePressure、base.latestSexDays、base.sperms、metabolism',
+    '1. 角色基础注册：base.age、base.race、base.vitalityLevel、base.psyStressLevel、metabolism.libido、base.uterinePressure、base.latestSexDays、base.sperms、base.eggs、metabolism',
     '2. 情感与妊娠经验：experience',
     ...(includeBreedingPsychology ? ['3. 繁育心理：psychology.mens 或 psychology.preg（二选一，互斥）'] : []),
     '4. 既有孩子记录：children',
@@ -816,6 +816,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- base.uterinePressure: 初始宫压。非妊娠上限50；妊娠後会随进度平滑提升，臨產期上限达150。【危险警告】孕早期与孕中期前期上限极低，超过15便极易触发流产警告！除非开局正在临盆或剧烈腹痛，否则强烈建议填 0。',
     '- base.latestSexDays: 距最近一次性行为经过的天数。若 experience.latestSexPartner 有意义，建议一并填写；若已超过最近一月经周期或无从判断，可为 null。',
     '- base.sperms: 体内残留精液来源列表。适用于刚性交结束、仍有精液残留的开局；每项包含 male、race、value。race 可直接写 [衍生]种族，系统会自动拆出 derivedType。',
+    '- base.eggs: 当前存活、可受精的卵子数。仅当排卵期开局且角色资料明确写了「已排出 N 颗卵子」时按剧情填 N；排卵期开局但资料未提排卵则省略（引擎会在时间推进时自动排出）；非排卵期一律省略。',
     '- metabolism: 初始需求状态。普通种族上限皆為150（尿意的上限会随孕期与入盆状态被压缩），包含 urine、stool、hunger、sleep、milk、libido，分别表示尿意、便意、饿意、困意、乳意、性欲；urine 与 stool 是两条独立的需求，孕期修正方向相反——尿意产量上升且容量被压，便意蠕动变慢且排出受阻；milk 在普通周期表示乳房胀敏或周期不适，在妊娠、假孕或产后恢复阶段也可表示泌乳需求。',
     '- metabolism 各项应按开局情境赋合理初值，不要默认全 0：一个正常生活着的角色不该所有需求都是零。开场是早晨可给 urine 40~60、hunger 30~50；刚吃饱则 hunger 0；憋了很久可给 urine 100+；一夜没睡可给 sleep 80+；刚睡醒则 sleep 0。全 0 仅适用于刚出生、刚被清空或明确「一切归零」式的开局。剧情、角色卡或 normalDescription 里能推断出身体状态的，都应如实填进去；实在无从判断的单项给 0 即可。',
     '- 若 base.derivedType 不为 null，则 metabolism 可填写 flux（范围 -150 到 150），并保留该衍生类型未抵免的普通需求。flux 是衍生种族专用的单一极性需求值：正值与负值分别代表两种相反的释放需求，绝对值越高需求越强。',
@@ -844,6 +845,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- 魅魔女仆: {"experience":{"virginity":"前任主人","emotionalMate":null,"pregnantExperience":5,"naturalBirthExperience":3,"surgicalBirthExperience":0,"miscarriageExperience":2}}',
     '- 守贞人妻: {"experience":{"virginity":"丈夫","latestSexPartner":"丈夫","emotionalMate":"丈夫","marriageMate":"丈夫","pregnantExperience":3,"naturalBirthExperience":0,"surgicalBirthExperience":2,"miscarriageExperience":0}}',
     '- 刚做爱开局: {"base":{"latestSexDays":0,"sperms":[{"male":"丈夫","race":"[不死-僵尸]人类","value":30}]},"experience":{"latestSexPartner":"丈夫"}}',
+    '- 排卵期已排卵开局: {"base":{"stage":"排卵期","eggs":2}}',
     '【3. 繁育心理】',
     '参数说明：',
     '- 若 payload.breeding_inference 存在，先采用其中对应 mens 或 preg 的数值作为心理起始点；只有当角色资料与繁育推演明显冲突时才调整。',
@@ -922,6 +924,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '      "uterinePressure": 0,',
     '      "latestSexDays": 0,',
     '      "sperms": [],',
+    '      "eggs": 0,',
     '      "vitalityLevel": 4,',
     '      "psyStressLevel": 4',
     '    },',
@@ -1321,6 +1324,10 @@ function sanitizeRegistryProfile(profile, baseProfile) {
     if (profile.base.sperms !== undefined) {
       nextBase.sperms = sanitizeRegistrySperms(profile.base.sperms);
     }
+    if (profile.base.eggs !== undefined) {
+      const eggs = sanitizeMeter(profile.base.eggs, { min: 0, max: 99 });
+      if (eggs !== null) nextBase.eggs = eggs;
+    }
     if (profile.base.vitalityLevel !== undefined) {
       const vitalityLevel = Number(profile.base.vitalityLevel);
       if (Number.isFinite(vitalityLevel)) nextBase.vitalityLevel = Math.max(1, Math.min(7, Math.round(vitalityLevel)));
@@ -1473,6 +1480,14 @@ export function applyRegistryResult(chatState, result, { allowBreedingPsychology
     if (latestSexDays >= cycleLength) {
       nextCharacter.profile.base.latestSexDays = -1;
     }
+  }
+  // 注册带活卵只应发生在「排卵期开局、剧情已写明排出」的情境。自然排卵引擎不看卵子来历，
+  // 下一次整天推进还会再排一批——把本周期份额标记为已消耗，防止双倍排卵。
+  if (nextCharacter.profile.base.stage === '排卵期' && (Number(nextCharacter.profile.base.eggs) || 0) > 0) {
+    nextCharacter.profile.cooldown = {
+      ...(nextCharacter.profile.cooldown || {}),
+      naturalOvulationUsed: true,
+    };
   }
   chatState.characters[name] = syncCharacterStageFromProfile(normalizeCharacterPsychologyState(nextCharacter));
   return chatState.characters[name];
