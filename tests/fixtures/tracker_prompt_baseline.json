@@ -37,9 +37,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 15303,
+    "systemChars": 15502,
     "toolsChars": 13142,
-    "sha256": "d27805df82cacd1f235fec0e73eb4aa0d806349631a273010a79c7d3a6727066"
+    "sha256": "c55151863d83abb0ce63047fbd5ebbe6c6a144e6f828e92434c15098236d437a"
   },
   "default": {
     "sections": [
@@ -82,9 +82,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16021,
+    "systemChars": 16220,
     "toolsChars": 13142,
-    "sha256": "c3ba55d28ed125db736188bb9eb2cd85e2a8bdf1d10e7b13f6ee66cda0f21ea7"
+    "sha256": "df72539611f554c51cb2fda1685f0fa095a302a06cdddd6c3f68ec19359bf85f"
   },
   "diary": {
     "sections": [
@@ -128,9 +128,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16453,
+    "systemChars": 16652,
     "toolsChars": 13567,
-    "sha256": "8daef7da5237dbd20e224fa69a31068a9937ef1254f301ee28c281cf674099e6"
+    "sha256": "cea7ce56b17fce974eb081cbe09435d6a2f291d4cff5b5c75f39ea9edcedb0c7"
   },
   "wardrobe": {
     "sections": [
@@ -177,9 +177,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 18930,
+    "systemChars": 19129,
     "toolsChars": 16557,
-    "sha256": "3828aa89292b1088553c6a4722d9d688e645fb8ae1aafd2b52a6827ce9343c57"
+    "sha256": "2f50e27bfc42d01200d53c2ccf94c748003d0a4ebec3b257fbcc7518480ca2ae"
   },
   "psychology": {
     "sections": [
@@ -224,9 +224,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16982,
+    "systemChars": 17181,
     "toolsChars": 14150,
-    "sha256": "e75b7767702a474fea34ed7b5b3e899b1d09991eb5f8261995f24bc67a836e98"
+    "sha256": "50abca3bd5eb0845d162eebd6935e800074807181fa2d80a78c5c3ec29de089a"
   },
   "combined": {
     "sections": [
@@ -278,9 +278,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 20747,
+    "systemChars": 20946,
     "toolsChars": 18297,
-    "sha256": "4c8294e264e1e89080019afe77f770eb2f47e1ffa457330c0c324ca52addaf42"
+    "sha256": "651bac0f37d574a6caf48d12fd467ed9bbb069ed671a48eedbd74468f5f5508d"
   },
   "early": {
     "sections": [
@@ -324,9 +324,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16442,
+    "systemChars": 16641,
     "toolsChars": 13142,
-    "sha256": "1a4bd2351a30bf94a4d8cb1d499be7724188022b5a6b5e02905eb7bf25184b84"
+    "sha256": "5e0da319b881a7c52c20ebb8f82d107791780c5f76ac49d3190e348d9a503e84"
   },
   "late": {
     "sections": [
@@ -370,9 +370,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16444,
+    "systemChars": 16643,
     "toolsChars": 13142,
-    "sha256": "7c384a76d416977d6201d0804e69101f097f0b60b0c99d04eb1b04b9a5072f27"
+    "sha256": "d78f49c09ae802be1e096771c3c6843a770bbeea322894c571158e0abadacc53"
   },
   "prodromal": {
     "sections": [
@@ -417,9 +417,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16445,
+    "systemChars": 16644,
     "toolsChars": 13449,
-    "sha256": "fdc34ead9a54f849a8e24a22f10ec49753afea5415ea27cb993976310cd5037e"
+    "sha256": "0f938c0bfdbc206dd5a94b29ff82af4a43ac2984db38138eede0e371f4e898d0"
   },
   "second_stage": {
     "sections": [
@@ -464,9 +464,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16443,
+    "systemChars": 16642,
     "toolsChars": 13449,
-    "sha256": "ec4d533825e3d0096dfbcce1d1529481ccb3965bb4a80c0afd77f00522e7c9c9"
+    "sha256": "9d49acd84e6af0875a5f9dfe5ca23f551d205424bcaffc9ddab33a1233377651"
   },
   "postpartum": {
     "sections": [
@@ -510,9 +510,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16440,
+    "systemChars": 16639,
     "toolsChars": 13142,
-    "sha256": "6de1da76666f228916b10bf5ce34f2025705ba42165e26bf20f08f6594a3cd39"
+    "sha256": "0b1f2661e3427ebe0d91f564731bc1caf348f7610a211d0e16c8c387ba163e5e"
   },
   "offscreen": {
     "sections": [
@@ -558,9 +558,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 18723,
+    "systemChars": 18922,
     "toolsChars": 16557,
-    "sha256": "126ca6a9fd055afc2a0d15ecefc3c716de8964976b0553d4233bc79bc9dfd05a"
+    "sha256": "4f27594eb1e34d7e6c75d01e7843eb715a514a3d391f45f4ac9f60c66364c777"
   },
   "immune": {
     "sections": [
@@ -602,9 +602,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 15814,
+    "systemChars": 16013,
     "toolsChars": 13142,
-    "sha256": "76a3c14065843b741c385a1400cd24c2d480840e8dcf1a1f1439b8319359250f"
+    "sha256": "bad6a95e7aff017cd54d99ca7154e6daa8fdcbfc2d0e827acf9a32f352517ab1"
   },
   "priority": {
     "sections": [
@@ -647,9 +647,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 15892,
+    "systemChars": 16091,
     "toolsChars": 13142,
-    "sha256": "8acce9a7697180f63ae1f178e263125eec4b902ba39a9f5a679eb9de82876824"
+    "sha256": "180574ed143712e76515e2b440b16aace99fd6f8171849127cecc256f0f5e1e5"
   },
   "flux": {
     "sections": [
@@ -692,9 +692,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16045,
+    "systemChars": 16244,
     "toolsChars": 13142,
-    "sha256": "6ac753b316e85cad11778c48e2d7ab07d79602c333346de978c3e8beaff13cc9"
+    "sha256": "75c0a39b9817bc19c922feb79402381fd5aad5dba3dc022c50be6c027ead9bf6"
   },
   "egg": {
     "sections": [
@@ -738,9 +738,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16661,
+    "systemChars": 16860,
     "toolsChars": 13142,
-    "sha256": "5a2081d28f8f36d6d4357b899c9af3a49dfa5d5efabcc64fa84177f9dcf6584b"
+    "sha256": "8fdb032e4d25beb306043a5d20579e1a0a32406b17566f68a6029ad87f142faf"
   },
   "urine_0": {
     "sections": [
@@ -783,9 +783,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16021,
+    "systemChars": 16220,
     "toolsChars": 13142,
-    "sha256": "c3ba55d28ed125db736188bb9eb2cd85e2a8bdf1d10e7b13f6ee66cda0f21ea7"
+    "sha256": "df72539611f554c51cb2fda1685f0fa095a302a06cdddd6c3f68ec19359bf85f"
   },
   "urine_1": {
     "sections": [
@@ -828,9 +828,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16065,
+    "systemChars": 16264,
     "toolsChars": 13142,
-    "sha256": "89ee7f7e930fb52f7b4578176edf1eb8f6ab4f889907c0ccb554d2ca7b2c7b88"
+    "sha256": "6884a4645ca0e95ad28bc6862b0cf9938881bdb0e10d264c28312704bb2c5fb8"
   },
   "urine_2": {
     "sections": [
@@ -873,9 +873,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16101,
+    "systemChars": 16300,
     "toolsChars": 13142,
-    "sha256": "9c5a957950e4eeca2bc06cd90b81f9c98f0242e70bfabe4bc1873148dc6d334a"
+    "sha256": "426ba99d7a8b36afd0eb214d9c8ceea04994a4867b7754e7ea1a276d70f40c60"
   },
   "urine_3": {
     "sections": [
@@ -918,9 +918,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16129,
+    "systemChars": 16328,
     "toolsChars": 13142,
-    "sha256": "890956d012ae21a2cdce4dfe5c54ae9be9aa369d158133aa9f09376906a34e35"
+    "sha256": "b7bf9901af6f801bf140e6ac49758041ce1f3e29f3dff03d8405209158fa10d7"
   },
   "urine_4": {
     "sections": [
@@ -963,9 +963,9 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16152,
+    "systemChars": 16351,
     "toolsChars": 13142,
-    "sha256": "a16587b2edc55b43e0809c211fe4ffc73cab1d1752c0acd103581c98aee1dd84"
+    "sha256": "c441b77172b20d6550ce428a463517bd44f50617fbe59d7c370b55911cb40218"
   },
   "urine_5": {
     "sections": [
@@ -1008,8 +1008,8 @@
       "bsSetGestationLock",
       "bsMaternalFetalInteraction"
     ],
-    "systemChars": 16087,
+    "systemChars": 16286,
     "toolsChars": 13142,
-    "sha256": "18ceea954631749585ee042c5e621cbd2f96bebadad57b45a22795dc5b2fc555"
+    "sha256": "5799259f377f4bf2d07699cd40d72ed1254793a8a2db98cbb0327c8e3eec0408"
   }
 }

@@ -588,7 +588,7 @@ export function getOvaryStatusText(profile) {
   const stage = String(base.stage || '');
   const eggs = Math.max(0, Math.round(Number(base.eggs) || 0));
   const fetuses = Array.isArray(profile?.pregnant?.fetuses) ? profile.pregnant.fetuses : [];
-  if (PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage)) return '妊娠中，卵巢暂停排卵';
+  if (PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage) || stage === '产兆前驱') return '妊娠中，卵巢暂停排卵';
   if (eggs > 0) return `已排出 ${eggs} 颗成熟卵子，尚可受精`;
   if (fetuses.length > 0) return '本周期排卵已完成';
   switch (stage) {
@@ -600,6 +600,62 @@ export function getOvaryStatusText(profile) {
     case '产后恢复': return '产后恢复中，排卵尚未重启';
     default: return '';
   }
+}
+
+/**
+ * 子宫状态的一句话描述（只读派生，不落档）：移植孕百科 v10「子宫状态」栏（限 50 字）。
+ * 引擎按阶段给固定措辞——不做实时生理模拟，宫缩/羊膜等细粒度数值另有专门字段。
+ */
+export function getUterusStatusText(profile) {
+  const stage = String(profile?.base?.stage || '');
+  switch (stage) {
+    case '月经期': return '子宫内膜周期性脱落，宫体轻微痉挛';
+    case '卵泡期': return '子宫内膜修复增厚，宫体柔软平静';
+    case '排卵期': return '宫颈黏液稀薄，子宫处于易孕状态';
+    case '黄体期': return '子宫内膜增厚松软，静候着床结果';
+    case '假孕期': return '子宫呈妊娠样胀大，但腔内无胚胎';
+    case '产后恢复': return '产后宫缩复旧中，宫体逐渐回缩';
+    case '孕早期': return '子宫温和增大尚不明显，胚胎着床发育中';
+    case '孕中期': return '子宫随胎儿明显增大，正逐渐上移出盆腔';
+    case '孕晚期': return '子宫充分扩张占据腹腔，偶有假性宫缩';
+    case '临产期': return '子宫下段充分拉伸，临产随时可能发动';
+    case '逾期': return '胎儿超期滞留，子宫过度扩张且敏感';
+    case '产兆前驱': return '不规则宫缩渐频，分娩前兆显现';
+    case '第一产程': return '规律宫缩进行中，宫颈口持续扩张';
+    case '第二产程': return '宫缩全力推送，胎体正通过产道';
+    case '第三产程': return '胎盘娩出阶段，宫腔开始回缩';
+    default: return '';
+  }
+}
+
+/**
+ * 受孕几率的一句话描述（只读派生）：移植孕百科 v10「受精機率」栏。
+ * 已受精显示来源；未受精按 精液×卵子×阶段 组合给档位化百分数——这是给
+ * 叙事看的口径值，不是实时计算；真正的受精判定仍由引擎逐颗卵掷骰。
+ */
+export function getFertilityChanceText(profile) {
+  const base = profile?.base || {};
+  const stage = String(base.stage || '');
+  const eggs = Math.max(0, Math.round(Number(base.eggs) || 0));
+  const fetuses = Array.isArray(profile?.pregnant?.fetuses) ? profile.pregnant.fetuses : [];
+  const hasSperm = (Array.isArray(base.sperms) ? base.sperms : [])
+    .some((item) => Math.max(0, Number(item?.value) || 0) > 0);
+  if (PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage) || stage === '产兆前驱') return '已怀孕';
+  if (fetuses.length > 0) {
+    const fathers = [...new Set(fetuses
+      .map((fetus) => String(fetus?.fathers || '').trim())
+      .filter(Boolean))];
+    return `已受精，精子来自${fathers.length > 0 ? fathers.join('、') : '未知对象'}`;
+  }
+  if (stage === '假孕期') return '假孕状态，无法受孕';
+  if (!hasSperm) return '0%，体内无精液残留';
+  if (eggs > 0) {
+    if (stage === '排卵期') return '约 85%，易孕峰值';
+    if (stage === '黄体期') return '约 40%，窗口正在关闭';
+    return '约 30%，卵子尚存活';
+  }
+  if (stage === '排卵期') return '约 15%，等待排卵';
+  return '约 5%，非易孕阶段';
 }
 
 export function syncCharacterStageFromProfile(characterState) {
